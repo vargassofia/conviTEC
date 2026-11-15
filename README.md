@@ -163,6 +163,8 @@ Con LIB y ALA en la Mac, SJO y LIM en Windows (una terminal por sede):
 
 ## Estructura
 
+Diseño de la solución (DI3), con diagramas de arquitectura, secuencia y clases: [docs/diseno/DI3-diseno-solucion.md](docs/diseno/DI3-diseno-solucion.md)
+
 | Paquete | Contenido |
 |---|---|
 | `grafo` | Grafo con matriz de adyacencia y Dijkstra |
