@@ -1,0 +1,5 @@
+classpath:/Users/sofiavargasgonzalez/.m2/repository/com/rabbitmq/amqp-client/5.22.0/amqp-client-5.22.0.jar	696718:1726491746000
+classpath:/Users/sofiavargasgonzalez/.m2/repository/com/google/code/gson/gson/2.11.0/gson-2.11.0.jar	298435:1716144881000
+classpath:/Users/sofiavargasgonzalez/.m2/repository/com/google/errorprone/error_prone_annotations/2.27.0/error_prone_annotations-2.27.0.jar	19370:1714146969000
+classpath:/Users/sofiavargasgonzalez/.m2/repository/org/slf4j/slf4j-simple/2.0.16/slf4j-simple-2.0.16.jar	15704:1723281321000
+classpath:/Users/sofiavargasgonzalez/.m2/repository/org/slf4j/slf4j-api/2.0.16/slf4j-api-2.0.16.jar	69435:1723281306000

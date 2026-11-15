@@ -10,9 +10,9 @@ public class PruebaRabbit {
         try (Connection conn = factory.newConnection();
              Channel canal = conn.createChannel()) {
 
-            canal.queueDeclare("prueba", false, false, true, null);
+            canal.queueDeclare("prueba", false, true, true, null);
             canal.basicPublish("", "prueba", null,
-                    "Hola desde ConviTEC".getBytes(StandardCharsets.UTF_8));
+                    "Conexión exitosa".getBytes(StandardCharsets.UTF_8));
 
             GetResponse r = canal.basicGet("prueba", true);
             System.out.println("Recibido: " + new String(r.getBody(), StandardCharsets.UTF_8));
