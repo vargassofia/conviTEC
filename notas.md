@@ -18,6 +18,7 @@ siempre usen el mismo prefijo "convitec" en los paquetes
 
 nota 4 
 en la carpeta modelo existe venta, producto, y pedido, estas son clases vacias provisionales, eliminar o editar en caso de ser necesario
+(actualizado) Venta y DetalleVenta ya estan implementadas (las hice yo, ver Nota 14). Pedido y Producto siguen vacias y son de la Persona 2.
 
 Nota 5 - Grafo de rutas (Paso 1, paquete cr.ac.tec.convitec.grafo)
 El mapa de rutas esta en src/main/resources/rutas.json. Son 13 ubicaciones y 15 rutas, el tiempo va en minutos.
@@ -63,7 +64,7 @@ Nota 7 - Decisiones importantes
 Nota 8 - Como correr las pruebas
 En la terminal, en la carpeta del proyecto:
 mvn clean test
-Tienen que salir 54 pruebas sin fallos (GrafoTest, CargadorGrafoTest, DijkstraTest, PlanificadorEntregasTest, SalidasDiariasTest y ServicioRutasTest).
+Tienen que salir 73 pruebas sin fallos (GrafoTest, CargadorGrafoTest, DijkstraTest, PlanificadorEntregasTest, SalidasDiariasTest, ServicioRutasTest, VentaTest, ServicioEntregasTest y RepositorioVentasMemoriaTest).
 
 Nota 9 - Planificador de entregas (Paso 3, paquete cr.ac.tec.convitec.rutas)
 Clases:
@@ -134,3 +135,72 @@ Nota 12 - Decisiones del planificador
 - IServicioRutas cambio: ahora recibe los pendientes (iniciarRecorrido y planificarRecorridoCompleto) y tiene hayEntregasPendientes y obtenerRecorrido.
 
 Total de pruebas: 54.
+
+Nota 13
+Voy a implementar venta y detalle en modelo. usted se queda con pedido y producto. para conectarnos dejo 2 interfaces en servicios: IGestorPedidos (me da el detalle de un pedido y marca un pedido como entregado) y IRepositorioVentas (Guarda las ventas en archivos). Mientras tanto, pruebo versiones en memoria.
+
+Nota 14 - Ventas (Paso 4, paquete cr.ac.tec.convitec.modelo)
+- DetalleVenta: un producto vendido: codigoProducto, nombreProducto, cantidad (> 0), precioUnitario (>= 0) y subtotal (cantidad x precio, se calcula solo).
+- Venta: idVenta, idPedido, sede, destino, fechaHora (LocalDateTime), horaSalida ("11:00" o "15:00"), detalles, montoTotal (suma de subtotales, se calcula solo), tiempoTraslado (minutos) y getRendimiento() = monto / tiempo.
+Las dos validan sus datos y si algo esta mal tiran IllegalArgumentException. No se pueden modificar despues de creadas.
+Venta y DetalleVenta son mias. Pedido y Producto siguen siendo de la Persona 2.
+
+Nota 15 - Persona 2: que tiene que implementar
+Dos interfaces en el paquete servicios:
+
+1) IGestorPedidos
+- DetalleVenta[] obtenerDetalle(String idPedido): los productos del pedido. Si el pedido no existe devuelvan null.
+- void marcarEntregado(String idPedido, LocalDateTime fechaHora): pasar el pedido a ENTREGADO.
+Ejemplo de obtenerDetalle para un pedido con 2 cafes de ₡1500 y 1 pan de ₡1000:
+
+public DetalleVenta[] obtenerDetalle(String idPedido) {
+    Pedido pedido = buscarPedido(idPedido);     // su estructura propia
+    if (pedido == null) {
+        return null;
+    }
+    return new DetalleVenta[]{
+        new DetalleVenta("C01", "Café", 2, 1500),
+        new DetalleVenta("P05", "Pan", 1, 1000)
+    };
+}
+Ojo: no repitan el mismo codigo de producto en un pedido (sumen las cantidades), y no devuelvan un arreglo vacio para un pedido que existe.
+
+2) IRepositorioVentas (guardando las ventas en archivos de la sede)
+- void guardar(Venta venta)
+- Venta[] listar(): todas las ventas; si no hay, new Venta[0] (nunca null).
+- Venta buscarPorIdPedido(String idPedido): null si ese pedido no tiene venta.
+Mientras no exista la de archivos, se puede usar RepositorioVentasMemoria (paquete entregas), que hace lo mismo pero en memoria.
+
+Nota 16 - Persona 1: como registrar las entregas desde la interfaz
+ServicioEntregas (paquete entregas) convierte los pedidos entregados en ventas.
+
+import cr.ac.tec.convitec.entregas.*;
+import cr.ac.tec.convitec.rutas.*;
+
+ServicioRutas rutas = new ServicioRutas(grafo, "San José");
+ServicioEntregas entregas = new ServicioEntregas("San José", gestorPedidos, repositorioVentas);
+
+Paso a paso (boton "Calcular siguiente punto de entrega"):
+rutas.iniciarRecorrido(pendientes, "11:00");
+if (rutas.hayEntregasPendientes()) {
+    ParadaEntrega parada = rutas.calcularSiguienteEntrega();
+    Venta[] ventas = entregas.registrarParada(parada, "11:00", LocalDateTime.now());
+}
+
+Todo de una vez:
+RecorridoEntrega recorrido = rutas.planificarRecorridoCompleto(pendientes, "15:00");
+Venta[] ventas = entregas.registrarRecorrido(recorrido, LocalDateTime.now());
+
+Si algun pedido no existe, no tiene productos o ya tenia venta, tira IllegalStateException con el mensaje (pueden mostrarlo en la interfaz).
+Si la parada, el recorrido o la fecha vienen null, tira IllegalArgumentException.
+
+Nota 17 - Decisiones de ventas
+- La venta se crea cuando el pedido se ENTREGA (no cuando se registra).
+- idVenta = "V-" + idPedido (ej. pedido P3 -> venta V-P3).
+- El tiempo de traslado de la venta es el tiempo acumulado de la parada donde se entrego (desde la sede).
+- Rendimiento = monto / tiempo. Si el tiempo es 0 (pedido entregado en la misma sede) se usa 1 minuto para no dividir entre cero.
+- No se duplican ventas: si el pedido ya tiene venta, tira IllegalStateException.
+- Si un pedido de la parada falla, NO se registra nada de esa parada (primero se revisan todos y despues se guardan). En registrarRecorrido, las paradas anteriores a la que fallo si quedan registradas.
+- Un mismo producto no puede venir repetido en los detalles de una venta.
+
+Total de pruebas: 73.
