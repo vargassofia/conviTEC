@@ -64,7 +64,7 @@ Nota 7 - Decisiones importantes
 Nota 8 - Como correr las pruebas
 En la terminal, en la carpeta del proyecto:
 mvn clean test
-Tienen que salir 73 pruebas sin fallos (GrafoTest, CargadorGrafoTest, DijkstraTest, PlanificadorEntregasTest, SalidasDiariasTest, ServicioRutasTest, VentaTest, ServicioEntregasTest y RepositorioVentasMemoriaTest).
+Tienen que salir 96 pruebas sin fallos (GrafoTest, CargadorGrafoTest, DijkstraTest, PlanificadorEntregasTest, SalidasDiariasTest, ServicioRutasTest, VentaTest, ServicioEntregasTest, RepositorioVentasMemoriaTest, OrdenamientoTest y ServicioEstadisticasTest).
 
 Nota 9 - Planificador de entregas (Paso 3, paquete cr.ac.tec.convitec.rutas)
 Clases:
@@ -204,3 +204,63 @@ Nota 17 - Decisiones de ventas
 - Un mismo producto no puede venir repetido en los detalles de una venta.
 
 Total de pruebas: 73.
+
+Nota 18 - Estadisticas de la sede (Paso 5, paquete cr.ac.tec.convitec.estadisticas)
+- Comparador: interfaz propia para decir como se ordena algo (no usamos java.util.Comparator).
+- Ordenamiento: MergeSort propio. Ordena cualquier arreglo con un Comparador y devuelve uno nuevo (no toca el original).
+- ResumenProducto: lo que se vendio de un producto en la sede: codigo, nombre, unidades y monto total.
+- ProductoEstrella: el producto con mas monto vendido (es el primero del ranking).
+- ServicioEstadisticas: implementa IServicioEstadisticas. Saca historial, producto estrella, ranking de productos, peores pedidos y monto total, leyendo las ventas del repositorio cada vez.
+IServicioEstadisticas cambio: ya NO usa Producto ni Pedido (las de la Persona 2). Ahora es:
+- Venta[] historialVentas()
+- Venta[] historialVentas(LocalDate desde, LocalDate hasta)
+- ProductoEstrella productoEstrella()
+- ResumenProducto[] rankingProductos()
+- Venta[] peoresPedidos(int cantidad)
+- double montoTotalVendido()
+
+Nota 19 - MergeSort para todo el grupo
+Si necesitan ordenar algo (productos, pedidos, lo que sea), pueden usar Ordenamiento en vez de hacer otro. Ejemplo, ordenar productos por precio de menor a mayor:
+
+import cr.ac.tec.convitec.estadisticas.*;
+
+Producto[] ordenados = Ordenamiento.ordenar(productos,
+        (a, b) -> Double.compare(a.getPrecio(), b.getPrecio()));
+
+El comparador devuelve negativo si a va antes, 0 si son iguales y positivo si a va despues. Para orden al reves, inviertan a y b.
+Es estable: si dos son iguales quedan en el mismo orden en que venian. Si le pasan un arreglo null tira IllegalArgumentException.
+
+Nota 20 - Persona 1: mostrar las estadisticas en la interfaz
+
+import cr.ac.tec.convitec.estadisticas.*;
+
+ServicioEstadisticas estadisticas = new ServicioEstadisticas("San José", repositorioVentas);   // el mismo repositorio que usa ServicioEntregas
+
+Historial:
+for (Venta v : estadisticas.historialVentas()) {          // o historialVentas(desde, hasta)
+    // v.getFechaHora(), v.getDetalles() (productos, cantidades, precios), v.getMontoTotal()
+}
+
+Producto estrella:
+ProductoEstrella estrella = estadisticas.productoEstrella();
+if (estrella == null) {
+    // mostrar "Todavia no hay ventas"
+} else {
+    // estrella.getNombreProducto(), estrella.getUnidadesVendidas(), estrella.getMontoTotal()
+}
+
+Peores pedidos:
+Venta[] peores = estadisticas.peoresPedidos(5);            // los 5 de menor rendimiento, el peor primero
+// peores[i].getIdPedido(), peores[i].getRendimiento() (₡ por minuto), peores[i].getTiempoTraslado()
+
+Nota 21 - Decisiones de estadisticas
+- Producto estrella = el de MAYOR MONTO (unidades x precio), no el de mas unidades.
+- Empates en producto estrella y ranking: mayor monto, si empatan el de mas unidades, si siguen empatados el codigo menor alfabeticamente.
+- Empates en peores pedidos: menor rendimiento, si empatan el de mas tiempo de traslado, si siguen empatados el idPedido menor.
+- Si no hay ventas, productoEstrella() devuelve null (y el resto devuelve arreglos vacios o 0).
+- Rendimiento = monto / tiempo. Tiempo 0 (entrega en la misma sede) cuenta como 1 minuto.
+- Historial: de la venta mas reciente a la mas antigua (si tienen la misma fecha, idVenta menor primero). El rango de fechas incluye los dos dias; si desde es despues de hasta tira IllegalArgumentException.
+- peoresPedidos(0) o negativo tira IllegalArgumentException; si piden mas de los que hay, devuelve todos.
+- Se ignoran las ventas de otra sede que esten en el repositorio (cada sede solo ve las suyas).
+
+Total de pruebas: 96.
