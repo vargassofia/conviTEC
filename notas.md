@@ -64,7 +64,8 @@ Nota 7 - Decisiones importantes
 Nota 8 - Como correr las pruebas
 En la terminal, en la carpeta del proyecto:
 mvn clean test
-Tienen que salir 96 pruebas sin fallos (GrafoTest, CargadorGrafoTest, DijkstraTest, PlanificadorEntregasTest, SalidasDiariasTest, ServicioRutasTest, VentaTest, ServicioEntregasTest, RepositorioVentasMemoriaTest, OrdenamientoTest y ServicioEstadisticasTest).
+Tienen que salir 128 pruebas sin fallos (GrafoTest, CargadorGrafoTest, DijkstraTest, PlanificadorEntregasTest, SalidasDiariasTest, ServicioRutasTest, VentaTest, ServicioEntregasTest, RepositorioVentasMemoriaTest, OrdenamientoTest, ServicioEstadisticasTest, ConfigSedeTest, MensajeTest, ProcesadorMensajesTest, RespuestasPendientesTest y MensajeriaRabbitIntegracionTest).
+Ojo: las 5 de MensajeriaRabbitIntegracionTest se SALTAN (Skipped) si RabbitMQ no esta corriendo en su compu. Eso no es un error.
 
 Nota 9 - Planificador de entregas (Paso 3, paquete cr.ac.tec.convitec.rutas)
 Clases:
@@ -264,3 +265,124 @@ Nota 21 - Decisiones de estadisticas
 - Se ignoran las ventas de otra sede que esten en el repositorio (cada sede solo ve las suyas).
 
 Total de pruebas: 96.
+
+
+Nota 22 - Mensajeria entre sedes (Paso 6, paquetes cr.ac.tec.convitec.mensajeria y config)
+Las sedes NO se leen archivos entre si: todo lo que una sede necesita de otra va por mensajes RabbitMQ.
+Flujo de un pedido (ejemplo: Alajuela pide 2 bebidas B01 que solo hay en Limon):
+
+  ALA                                        LIM
+   |--- SOLICITAR_RESERVA (P7, B01, 2) ------->|  reservar(): aparta 2 unidades
+   |<-- RESPUESTA_RESERVA (exito / motivo) ----|
+   |
+   |  si TODO el pedido se puede y hay ruta:
+   |--- CONFIRMAR_RESERVA (P7, B01) ---------->|  confirmar(): descuenta definitivo
+   |                                           |--- ACTUALIZACION_STOCK (B01 = 3) ---> TODAS las sedes
+   |  si algo falla:
+   |--- LIBERAR_RESERVA (P7, B01) ------------>|  liberar(): devuelve las 2 unidades
+
+Topologia en RabbitMQ:
+- Exchange directo "convitec.directo": cada sede tiene su cola "convitec.sede.LIB", "convitec.sede.ALA", etc. Ahi le llegan SOLICITAR, CONFIRMAR y LIBERAR.
+- Exchange fanout "convitec.stock": cada sede tiene su cola "convitec.stock.<COD>". Ahi llegan las ACTUALIZACION_STOCK de todas.
+- Cada sede tiene ademas una cola de respuestas temporal (la crea RabbitMQ con un nombre raro tipo amq.gen-...).
+Las colas son durables: si una sede esta apagada, sus mensajes la esperan en la cola.
+
+Los mensajes viajan en JSON. Ejemplo de una solicitud:
+{
+  "id": "ALA-1763140000000-1-48213",
+  "tipo": "SOLICITAR_RESERVA",
+  "sedeOrigen": "ALA",
+  "sedeDestino": "LIM",
+  "correlationId": "ALA-1763140000000-1-48213",
+  "idPedido": "P7",
+  "codigoProducto": "B01",
+  "cantidad": 2,
+  "exito": false,
+  "fechaHora": "2026-11-15T10:30:00.123"
+}
+Tipos: SOLICITAR_RESERVA, RESPUESTA_RESERVA, CONFIRMAR_RESERVA, LIBERAR_RESERVA y ACTUALIZACION_STOCK.
+Las sedes se nombran por codigo: LIB (Liberia), ALA (Alajuela), SJO (San José), LIM (Limón).
+
+Clases:
+- MensajeriaRabbit: implementa IMensajeria (la que usan ustedes). Conecta, envia y recibe.
+- ProcesadorMensajes: decide que hacer con cada mensaje que llega (no sabe nada de RabbitMQ).
+- RespuestasPendientes: hace que solicitarReserva espere la respuesta (con wait/notify y timeout).
+- Mensaje, TipoMensaje, RespuestaReserva, TopologiaRabbit, MensajeriaException.
+- config.ConfigSede: la configuracion de la sede (ver Nota 24). config.SedesConocidas: los 4 codigos y nombres.
+
+Nota 23 - Persona 2: que tiene que implementar para la mensajeria
+1) IInventarioLocal (paquete servicios): lo llama la mensajeria cuando OTRA sede le pide algo a la suya.
+- RespuestaReserva reservar(String idPedido, String codigoProducto, int cantidad): apartar unidades. Devuelvan RespuestaReserva.ok(null) o RespuestaReserva.rechazo(null, "stock insuficiente de B01 (hay 1, se piden 2)"). La mensajeria le agrega el nombre de la sede al motivo.
+- int confirmar(String idPedido, String codigoProducto): descontar definitivo lo reservado y devolver el stock nuevo.
+- void liberar(String idPedido, String codigoProducto): devolver lo reservado.
+MUY IMPORTANTE:
+- confirmar y liberar tienen que ser IDEMPOTENTES: si los llaman 2 veces, o sobre una reserva que no existe, no tiene que fallar ni descontar 2 veces.
+- Los metodos tienen que ser synchronized: los mensajes llegan en otro hilo mientras la interfaz tambien usa el inventario.
+
+2) ICatalogoGlobal (paquete servicios):
+- void actualizarStock(String codigoSede, String codigoProducto, int cantidadNueva): guardar el stock nuevo de esa sede. Tambien synchronized.
+
+Ejemplo de como su servicio de pedidos usa la mensajeria (pedido de Alajuela con productos de Limon y San Jose):
+
+RespuestaReserva r1 = mensajeria.solicitarReserva("LIM", "P7", "B01", 2);
+RespuestaReserva r2 = mensajeria.solicitarReserva("SJO", "P7", "C03", 1);
+
+if (r1.isExito() && r2.isExito() && hayRutaAlDestino) {
+    mensajeria.confirmarReserva("LIM", "P7", "B01");
+    mensajeria.confirmarReserva("SJO", "P7", "C03");
+    // registrar el pedido como aceptado
+} else {
+    // cancelar TODO el pedido: liberar lo que si se habia reservado
+    if (r1.isExito()) mensajeria.liberarReserva("LIM", "P7", "B01");
+    if (r2.isExito()) mensajeria.liberarReserva("SJO", "P7", "C03");
+    String motivo = !r1.isExito() ? r1.getMotivo() : r2.getMotivo();   // ej. "Limón no respondió a tiempo"
+    // rechazar el pedido mostrando el motivo
+}
+
+Notas:
+- solicitarReserva ESPERA la respuesta (hasta reserva.timeoutMs). Si la otra sede no responde, devuelve exito=false con "<Sede> no respondió a tiempo". No tira excepcion por problemas de red.
+- Si se vencio el tiempo, igual llamen liberarReserva por si la otra sede si alcanzo a reservar: el orden de la cola garantiza que el LIBERAR se procesa despues de la solicitud.
+- Cuando su sede vende o cambia su propio stock, avisen a las demas con mensajeria.publicarActualizacionStock("B01", stockNuevo). (Al confirmar una reserva de otra sede, la mensajeria lo publica sola.)
+- Codigo de sede invalido, cantidad <= 0 o mandarse mensajes a si misma tira IllegalArgumentException.
+
+Nota 24 - Configuracion de cada sede
+Cada sede tiene su archivo en src/main/resources/sedes/: sede-LIB.properties, sede-ALA.properties, sede-SJO.properties y sede-LIM.properties.
+
+sede.codigo=ALA
+sede.nombre=Alajuela
+http.puerto=8082              (LIB 8081, ALA 8082, SJO 8083, LIM 8084)
+rabbit.host=localhost
+rabbit.puerto=5672
+rabbit.usuario=guest
+rabbit.clave=guest
+reserva.timeoutMs=5000
+datos.carpeta=datos/ALA
+
+Para iniciar la mensajeria de una sede:
+
+ConfigSede config = ConfigSede.cargarDesdeRecurso("sedes/sede-ALA.properties");
+IMensajeria mensajeria = new MensajeriaRabbit(config, inventarioLocal, catalogoGlobal);
+mensajeria.iniciar();      // si RabbitMQ no esta, tira MensajeriaException diciendo host y puerto
+...
+mensajeria.cerrar();       // al apagar la sede
+
+La clave real NO se sube al repositorio: si existe la variable de entorno CONVITEC_RABBIT_CLAVE, reemplaza a rabbit.clave.
+Mac/Linux:  export CONVITEC_RABBIT_CLAVE=la_clave
+Windows:    set CONVITEC_RABBIT_CLAVE=la_clave     (PowerShell: $env:CONVITEC_RABBIT_CLAVE="la_clave")
+
+Nota 25 - Conectarse desde otra computadora al broker de mi Mac
+1. Estar en la MISMA red (mejor un hotspot del celular, porque la red del TEC puede bloquear el puerto).
+2. En su .properties poner en rabbit.host la IP de mi Mac (yo se la paso; en la Mac se ve con: ipconfig getifaddr en0).
+3. El usuario guest SOLO funciona desde localhost. Yo creo un usuario para el grupo en mi Mac:
+   rabbitmqctl add_user convitec la_clave
+   rabbitmqctl set_permissions -p / convitec ".*" ".*" ".*"
+   y ustedes ponen rabbit.usuario=convitec y la clave en CONVITEC_RABBIT_CLAVE.
+4. El puerto 5672 tiene que estar abierto en mi Mac (si el firewall de macOS pregunta, permitir conexiones entrantes).
+5. Prueba rapida desde Windows: Test-NetConnection <IP> -Port 5672 (en PowerShell). Si sale TcpTestSucceeded : True, ya llega.
+
+Nota 26 - Pruebas de mensajeria
+- ConfigSedeTest, MensajeTest, ProcesadorMensajesTest y RespuestasPendientesTest NO necesitan RabbitMQ.
+- MensajeriaRabbitIntegracionTest levanta ALA y LIM de verdad contra RabbitMQ en localhost:5672. Si RabbitMQ no esta corriendo, esas pruebas se SALTAN solas (salen como Skipped, no como fallo).
+- Para correrlas en Mac: brew services start rabbitmq. Usan colas con sufijo ".prueba-..." y las borran al final, asi que no ensucian el broker.
+
+Total de pruebas: 128.
