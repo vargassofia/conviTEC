@@ -9,6 +9,9 @@ import cr.ac.tec.convitec.servicios.IRepositorioVentas;
  * Sirve para las pruebas y para probar la interfaz antes de que exista la versión
  * con archivos de la Persona 2. Usa un arreglo que crece duplicando su tamaño (sin colecciones).
  */
+// TODO PERSONA 2: reemplazar este repositorio en memoria por su implementación de IRepositorioVentas con
+//   archivos (las ventas deben sobrevivir al reiniciar la sede), cambiando la línea marcada en app/Sede.conDemostracion.
+//   Esta clase se puede conservar para pruebas.
 public class RepositorioVentasMemoria implements IRepositorioVentas {
 
     private static final int CAPACIDAD_INICIAL = 8;

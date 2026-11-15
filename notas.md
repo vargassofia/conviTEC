@@ -64,7 +64,7 @@ Nota 7 - Decisiones importantes
 Nota 8 - Como correr las pruebas
 En la terminal, en la carpeta del proyecto:
 mvn clean test
-Tienen que salir 128 pruebas sin fallos (GrafoTest, CargadorGrafoTest, DijkstraTest, PlanificadorEntregasTest, SalidasDiariasTest, ServicioRutasTest, VentaTest, ServicioEntregasTest, RepositorioVentasMemoriaTest, OrdenamientoTest, ServicioEstadisticasTest, ConfigSedeTest, MensajeTest, ProcesadorMensajesTest, RespuestasPendientesTest y MensajeriaRabbitIntegracionTest).
+Tienen que salir 166 pruebas sin fallos (SedeArranqueTest, GrafoTest, CargadorGrafoTest, DijkstraTest, PlanificadorEntregasTest, SalidasDiariasTest, ServicioRutasTest, VentaTest, ServicioEntregasTest, RepositorioVentasMemoriaTest, OrdenamientoTest, ServicioEstadisticasTest, ConfigSedeTest, MensajeTest, ProcesadorMensajesTest, RespuestasPendientesTest, MensajeriaRabbitIntegracionTest, ArgumentosSedeTest, ComandoConsolaTest, ConsolaSedeTest e InventarioDemoTest).
 Ojo: las 5 de MensajeriaRabbitIntegracionTest se SALTAN (Skipped) si RabbitMQ no esta corriendo en su compu. Eso no es un error.
 
 Nota 9 - Planificador de entregas (Paso 3, paquete cr.ac.tec.convitec.rutas)
@@ -386,3 +386,55 @@ Nota 26 - Pruebas de mensajeria
 - Para correrlas en Mac: brew services start rabbitmq. Usan colas con sufijo ".prueba-..." y las borran al final, asi que no ensucian el broker.
 
 Total de pruebas: 128.
+
+
+Nota 27 - Correr una sede con la consola (mientras la interfaz no esta lista)
+1. Encender RabbitMQ en la compu del broker (mi Mac): brew services start rabbitmq
+2. Generar el jar: mvn clean package   (queda en target/convitec-sede.jar)
+3. Correr cada sede en su propia terminal:
+   java -jar target/convitec-sede.jar ALA
+   java -jar target/convitec-sede.jar LIM --config C:\convitec\sede-LIM.properties   (desde otra compu, ver README)
+4. Escribir "ayuda" para ver los comandos. Ejemplos:
+   reservar LIM P1 B01 2
+   confirmar LIM P1 B01
+   catalogo
+   ruta San_José          (o ruta "San José"; las tildes son opcionales)
+   entregar 11:00 P1:Heredia P2:Cartago
+   salir
+Un comando mal escrito muestra el error y la ayuda, pero NO cierra la sede.
+El paso a paso para conectar 2 computadoras (rabbitmq-env.conf, usuario convitec, IP, firewall, hotspot) esta en el README.
+
+Nota 28 - Persona 2: el paquete demo es PROVISIONAL
+InventarioDemo y CatalogoGlobalDemo (paquete demo) son de mentira: productos fijos en memoria, sin archivos. Estan solo para poder probar la mensajeria y la consola.
+Cuando tengan sus clases reales, cambien SOLO la linea del return en Sede.conDemostracion (app/Sede.java):
+
+return new Sede(config, InventarioDemo.paraSede(config.getCodigo()), new CatalogoGlobalDemo(),
+        new RepositorioVentasMemoria());
+
+por algo como:
+
+return new Sede(config, new SuInventario(config), new SuCatalogoGlobal(config),
+        new SuRepositorioVentas(config));
+
+(los nombres de sus clases los eligen ustedes; config.getCarpetaDatos() les dice en que carpeta guardar los archivos de la sede).
+Despues de eso se puede borrar el paquete demo. Ojo: los comandos stock, agregar y catalogo de la consola solo funcionan con las clases demo; con las reales dicen que no estan disponibles.
+
+Nota 29 - Persona 1: arrancar el servidor HTTP
+La sede arranca en app/Main.java: lee los argumentos, carga la configuracion, crea la Sede con Sede.conDemostracion(config) y llama sede.iniciar().
+Arranquen su servidor HTTP ahi mismo, DESPUES de sede.iniciar(), usando el puerto de la configuracion:
+
+int puerto = config.getPuertoHttp();      // LIB 8081, ALA 8082, SJO 8083, LIM 8084
+
+Todo lo que necesitan lo dan los getters de Sede: getServicioRutas(), getEstadisticas(), getMensajeria(), getInventario(), getCatalogo(), getRepositorioVentas(), getNombre() y getCodigo().
+Si quieren dejar la consola tambien, pueden correr el servidor en otro hilo. Para cerrar, sede.cerrar() se puede llamar varias veces sin problema (Main ya lo llama en un shutdown hook).
+
+Total de pruebas: 163 (las 5 de MensajeriaRabbitIntegracionTest salen como Skipped si RabbitMQ esta apagado).
+
+
+Nota 30 - Huecos marcados y PENDIENTES.md
+- Lo que le toca a cada una esta marcado en el codigo con "// TODO PERSONA 1:" o "// TODO PERSONA 2:". Para verlos todos: grep -rn "TODO PERSONA" src
+- La lista completa de lo terminado y lo pendiente esta en PENDIENTES.md (en la raiz).
+- Cambio respecto a la Nota 28: ahora en Sede.conDemostracion hay 3 lineas separadas (inventario, catalogo y repositorio de ventas), cada una con su TODO PERSONA 2. Cambien esas 3 lineas, no el return.
+- SedeArranqueTest arranca las 4 sedes con lo que diga Sede.conDemostracion y una mensajeria falsa (sin RabbitMQ). Si despues de cambiar las clases demo esa prueba falla, el cambio rompio el arranque.
+
+Total de pruebas: 166.

@@ -8,6 +8,7 @@ import cr.ac.tec.convitec.mensajeria.ProcesadorMensajesTest.CatalogoFalso;
 import cr.ac.tec.convitec.mensajeria.ProcesadorMensajesTest.InventarioFalso;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.net.InetSocketAddress;
@@ -58,10 +59,14 @@ class MensajeriaRabbitIntegracionTest {
         }
     }
 
+    private static boolean brokerOk;
+
     @BeforeAll
     static void iniciarSedes() {
-        assumeTrue(brokerDisponible(), "RabbitMQ no está corriendo en localhost:5672: se saltan las pruebas");
-
+        brokerOk = brokerDisponible();
+        if (!brokerOk) {
+            return; // cada prueba se salta en revisarBroker(), así Maven las cuenta como "Skipped"
+        }
         inventarioALA = new InventarioFalso(new String[]{"A01"}, new int[]{10});
         inventarioLIM = new InventarioFalso(new String[]{"B01", "B02"}, new int[]{5, 1});
         catalogoALA = new CatalogoFalso();
@@ -71,6 +76,15 @@ class MensajeriaRabbitIntegracionTest {
         lim = new MensajeriaRabbit(config("LIM", "Limón", 2000), inventarioLIM, catalogoLIM, TOPOLOGIA);
         ala.iniciar();
         lim.iniciar();
+    }
+
+    /**
+     * La suposición va aquí (y no en @BeforeAll) para que, sin broker, Maven reporte las
+     * pruebas como "Skipped". En @BeforeAll la clase entera se aborta y sale "Tests run: 0".
+     */
+    @BeforeEach
+    void revisarBroker() {
+        assumeTrue(brokerOk, "RabbitMQ no está corriendo en localhost:5672: se salta la prueba");
     }
 
     @AfterAll
