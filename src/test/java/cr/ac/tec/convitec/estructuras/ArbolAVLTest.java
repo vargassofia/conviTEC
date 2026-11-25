@@ -192,10 +192,10 @@ class ArbolAVLTest {
     }
 
     private String clave(int numero) {
-        String clave = Integer.toString(numero);
+        StringBuilder clave = new StringBuilder(Integer.toString(numero));
         while (clave.length() < 4) {
-            clave = "0" + clave;
+            clave.insert(0, '0');
         }
-        return clave;
+        return clave.toString();
     }
 }
