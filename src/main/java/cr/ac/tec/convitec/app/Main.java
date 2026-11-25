@@ -4,6 +4,8 @@ import cr.ac.tec.convitec.config.ConfigException;
 import cr.ac.tec.convitec.config.ConfigSede;
 import cr.ac.tec.convitec.grafo.GrafoException;
 import cr.ac.tec.convitec.mensajeria.MensajeriaException;
+import cr.ac.tec.convitec.web.ServidorWeb;
+import cr.ac.tec.convitec.web.ServidorWebException;
 
 import java.io.BufferedReader;
 import java.io.Console;
@@ -16,7 +18,9 @@ import java.nio.charset.Charset;
  *   java -jar target/convitec-sede.jar ALA
  *   java -jar target/convitec-sede.jar ALA --config mi-sede-ALA.properties
  *
- * Códigos de salida: 0 = normal, 1 = error de configuración o broker no disponible,
+ * Al arrancar conecta la mensajería, abre la interfaz web en http.puerto y deja la consola de prueba.
+ *
+ * Códigos de salida: 0 = normal, 1 = error de configuración, broker no disponible o puerto HTTP ocupado,
  * 2 = argumentos inválidos.
  */
 public final class Main {
@@ -63,19 +67,34 @@ public final class Main {
             return 1;
         }
 
-        Runtime.getRuntime().addShutdownHook(new Thread(sede::cerrar, "cerrar-sede-" + config.getCodigo()));
+        // Interfaz web + API REST en config.getPuertoHttp() (LIB 8081, ALA 8082, SJO 8083, LIM 8084).
+        // El servidor atiende en su propio hilo; la consola sigue en este.
+        ServidorWeb servidorWeb = new ServidorWeb(config);
+        try {
+            servidorWeb.iniciar();
+        } catch (ServidorWebException e) {
+            System.err.println("No se pudo iniciar la interfaz web: " + e.getMessage());
+            sede.cerrar();
+            return 1;
+        }
 
-        // TODO PERSONA 1: arrancar aquí el servidor HTTP (API REST + interfaz web) en config.getPuertoHttp()
-        //   (LIB 8081, ALA 8082, SJO 8083, LIM 8084), DESPUÉS de sede.iniciar(). Los servicios salen de los
-        //   getters de Sede: getServicioRutas(), getEstadisticas(), getMensajeria(), getInventario(), etc.
-        //   Si se deja también la consola, correr el servidor en otro hilo; al salir, detenerlo antes de
-        //   sede.cerrar(). Si el puerto está ocupado, mostrar un mensaje claro y devolver 1.
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> apagar(servidorWeb, sede),
+                "cerrar-sede-" + config.getCodigo()));
+
+        System.out.println("Interfaz web lista: " + servidorWeb.getUrl()
+                + "  (desde otra computadora: http://<IP-de-esta-computadora>:" + config.getPuertoHttp() + ")");
 
         ConsolaSede consola = new ConsolaSede(sede,
                 new BufferedReader(new InputStreamReader(System.in, charsetConsola())), System.out);
         consola.ejecutar();
-        sede.cerrar();
+        apagar(servidorWeb, sede);
         return 0;
+    }
+
+    /** Primero se detiene la web (para no recibir pedidos nuevos) y luego la mensajería. Seguro si se repite. */
+    private static void apagar(ServidorWeb servidorWeb, Sede sede) {
+        servidorWeb.detener();
+        sede.cerrar();
     }
 
     /** En Windows la consola no siempre es UTF-8: se usa el charset de la consola si existe. */

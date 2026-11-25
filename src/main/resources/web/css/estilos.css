@@ -1,0 +1,395 @@
+/* ConviTEC - estilos de la interfaz web.
+   Pensado para personas con poca experiencia: texto grande, buen contraste,
+   íconos siempre acompañados de texto y un color fijo que identifica la sede. */
+
+:root {
+  /* Colores base */
+  --fondo: #f4f6f9;
+  --superficie: #ffffff;
+  --texto: #1b2430;
+  --texto-suave: #556070;
+  --borde: #dde3ea;
+  --marca: #0f3d5e;
+  --acento: #f59e0b;
+  --exito: #157347;
+  --error: #b42318;
+  --error-fondo: #fdecea;
+
+  /* Color de la sede: se cambia según data-sede en <html> */
+  --sede: #0f3d5e;
+  --sede-suave: #e6eef5;
+
+  /* Medidas */
+  --radio: 12px;
+  --sombra: 0 1px 2px rgba(16, 24, 40, 0.06), 0 2px 8px rgba(16, 24, 40, 0.06);
+  --alto-encabezado: 68px;
+  --ancho-menu: 240px;
+
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 17px;
+  line-height: 1.5;
+  color: var(--texto);
+  background: var(--fondo);
+}
+
+/* Un color por sede, para que siempre se sepa en cuál se está trabajando */
+:root[data-sede="LIB"] { --sede: #b45309; --sede-suave: #fdf1e2; }
+:root[data-sede="ALA"] { --sede: #b91c1c; --sede-suave: #fdeaea; }
+:root[data-sede="SJO"] { --sede: #1d4ed8; --sede-suave: #e8effd; }
+:root[data-sede="LIM"] { --sede: #047857; --sede-suave: #e3f5ee; }
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--fondo);
+}
+
+h1, h2, h3 { line-height: 1.25; margin: 0; }
+p { margin: 0; }
+
+a { color: var(--sede); }
+
+:focus-visible {
+  outline: 3px solid var(--acento);
+  outline-offset: 2px;
+}
+
+.icono {
+  width: 24px;
+  height: 24px;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.saltar {
+  position: absolute;
+  left: -9999px;
+  top: 8px;
+  z-index: 100;
+  padding: 8px 16px;
+  background: var(--superficie);
+  border-radius: 8px;
+}
+.saltar:focus { left: 16px; }
+
+/* ------------------------------------------------------------------ */
+/* Encabezado                                                          */
+/* ------------------------------------------------------------------ */
+
+.encabezado {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  height: var(--alto-encabezado);
+  padding: 0 24px;
+  background: var(--superficie);
+  border-bottom: 1px solid var(--borde);
+  border-top: 5px solid var(--sede);
+}
+
+.marca {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--marca);
+  font-size: 1.3rem;
+  font-weight: 700;
+  text-decoration: none;
+  letter-spacing: -0.01em;
+}
+
+.sede-actual {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 20px;
+  border-left: 1px solid var(--borde);
+}
+
+.sede-insignia {
+  display: inline-grid;
+  place-items: center;
+  min-width: 52px;
+  height: 36px;
+  padding: 0 8px;
+  border-radius: 8px;
+  background: var(--sede);
+  color: #fff;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.sede-texto { display: flex; flex-direction: column; line-height: 1.2; }
+.sede-etiqueta { font-size: 0.8rem; color: var(--texto-suave); }
+.sede-texto strong { font-size: 1.05rem; }
+
+.proxima-salida {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--sede-suave);
+  color: var(--texto);
+  font-size: 0.95rem;
+}
+.proxima-salida svg {
+  width: 20px; height: 20px;
+  fill: none; stroke: var(--sede); stroke-width: 2; stroke-linecap: round;
+}
+
+.boton-menu {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--borde);
+  border-radius: 8px;
+  background: var(--superficie);
+  color: var(--texto);
+  font: inherit;
+  cursor: pointer;
+}
+.boton-menu svg {
+  width: 22px; height: 22px;
+  fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round;
+}
+
+/* ------------------------------------------------------------------ */
+/* Menú y contenido                                                    */
+/* ------------------------------------------------------------------ */
+
+.estructura {
+  display: grid;
+  grid-template-columns: var(--ancho-menu) minmax(0, 1fr);
+  min-height: calc(100vh - var(--alto-encabezado));
+}
+
+.menu {
+  position: sticky;
+  top: var(--alto-encabezado);
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  height: calc(100vh - var(--alto-encabezado));
+  padding: 20px 12px;
+  background: var(--superficie);
+  border-right: 1px solid var(--borde);
+}
+
+.menu a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  color: var(--texto);
+  font-weight: 500;
+  text-decoration: none;
+}
+.menu a:hover { background: var(--fondo); }
+.menu a[aria-current="page"] {
+  background: var(--sede-suave);
+  color: var(--sede);
+  font-weight: 700;
+  box-shadow: inset 4px 0 0 var(--sede);
+}
+
+.contenido {
+  width: 100%;
+  min-width: 0;
+  max-width: 1200px;
+  padding: 32px 40px 64px;
+}
+.contenido:focus { outline: none; }
+
+.cargando { color: var(--texto-suave); }
+
+.titulo-seccion { margin-bottom: 24px; }
+.titulo-seccion h1 { font-size: 1.8rem; letter-spacing: -0.01em; }
+.titulo-seccion p { margin-top: 6px; color: var(--texto-suave); }
+
+.subtitulo { font-size: 1.2rem; margin: 32px 0 14px; }
+
+/* ------------------------------------------------------------------ */
+/* Componentes                                                         */
+/* ------------------------------------------------------------------ */
+
+.tarjeta {
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra);
+}
+
+.boton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 10px 22px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--sede);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+.boton:hover { filter: brightness(1.08); }
+.boton-secundario {
+  background: var(--superficie);
+  color: var(--sede);
+  border-color: var(--borde);
+}
+.boton-secundario:hover { background: var(--sede-suave); filter: none; }
+
+/* Inicio */
+.bienvenida {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 32px;
+  padding: 28px 32px;
+  border-left: 6px solid var(--sede);
+}
+.bienvenida-etiqueta { color: var(--texto-suave); font-weight: 500; }
+.bienvenida h2 { font-size: 1.6rem; margin: 2px 0 10px; color: var(--sede); }
+.bienvenida p { max-width: 52ch; }
+
+.datos-sede {
+  display: grid;
+  gap: 14px;
+  margin: 0;
+  align-content: center;
+}
+.datos-sede div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--borde);
+}
+.datos-sede div:last-child { border-bottom: 0; padding-bottom: 0; }
+.datos-sede dt { color: var(--texto-suave); }
+.datos-sede dd { margin: 0; font-weight: 700; text-align: right; }
+
+.accesos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr));
+  gap: 16px;
+}
+.acceso {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 20px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: var(--radio);
+  box-shadow: var(--sombra);
+  color: var(--texto);
+  text-decoration: none;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.acceso:hover { border-color: var(--sede); transform: translateY(-2px); }
+.acceso-icono {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  flex: none;
+  border-radius: 10px;
+  background: var(--sede-suave);
+  color: var(--sede);
+}
+.acceso-texto { display: flex; flex-direction: column; gap: 4px; }
+.acceso-texto strong { font-size: 1.05rem; }
+.acceso-texto span { color: var(--texto-suave); font-size: 0.95rem; }
+
+/* Estado vacío / en construcción */
+.vacio {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 48px 32px;
+  text-align: center;
+}
+.vacio-icono {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--sede-suave);
+  color: var(--sede);
+}
+.vacio-icono .icono { width: 30px; height: 30px; }
+.vacio p { color: var(--texto-suave); max-width: 48ch; }
+.vacio .boton { margin-top: 8px; }
+
+/* Avisos */
+.aviso {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  z-index: 50;
+  max-width: min(640px, calc(100% - 32px));
+  padding: 14px 20px;
+  border-radius: 10px;
+  box-shadow: var(--sombra);
+  font-weight: 500;
+}
+.aviso-error {
+  background: var(--error-fondo);
+  color: var(--error);
+  border: 1px solid #f5c2bc;
+}
+
+/* ------------------------------------------------------------------ */
+/* Pantallas pequeñas                                                  */
+/* ------------------------------------------------------------------ */
+
+@media (max-width: 900px) {
+  .encabezado { gap: 12px; padding: 0 16px; }
+  .boton-menu { display: inline-flex; }
+  .marca span { display: none; }
+  .sede-actual { padding-left: 12px; }
+  .proxima-salida span { display: none; }
+  .proxima-salida { padding: 8px; }
+
+  .estructura { grid-template-columns: minmax(0, 1fr); }
+  .menu {
+    display: none;
+    position: fixed;
+    top: var(--alto-encabezado);
+    left: 0;
+    right: 0;
+    z-index: 15;
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--borde);
+    box-shadow: var(--sombra);
+  }
+  .menu.abierto { display: flex; }
+
+  .contenido { padding: 24px 16px 48px; }
+  .bienvenida { grid-template-columns: 1fr; padding: 24px; gap: 20px; }
+}
