@@ -1,3 +1,4 @@
-cr/ac/tec/convitec/grafo/CargadorGrafoTest.class
-cr/ac/tec/convitec/grafo/DijkstraTest.class
-cr/ac/tec/convitec/grafo/GrafoTest.class
+cr\ac\tec\convitec\grafo\DijkstraTest.class
+cr\ac\tec\convitec\modelo\ExistenciaTest.class
+cr\ac\tec\convitec\grafo\CargadorGrafoTest.class
+cr\ac\tec\convitec\grafo\GrafoTest.class
