@@ -4,6 +4,14 @@ C:\Users\tecni\IdeaProjects\conviTEC\src\main\java\cr\ac\tec\convitec\app\Consol
 C:\Users\tecni\IdeaProjects\conviTEC\src\main\java\cr\ac\tec\convitec\app\Main.java
 C:\Users\tecni\IdeaProjects\conviTEC\src\main\java\cr\ac\tec\convitec\app\Sede.java
 C:\Users\tecni\IdeaProjects\conviTEC\src\main\java\cr\ac\tec\convitec\catalogo\AVLTree.java
+C:\Users\tecni\IdeaProjects\conviTEC\src\main\java\cr\ac\tec\convitec\catalogo\CatalogoGlobal.java
+C:\Users\tecni\IdeaProjects\conviTEC\src\main\java\cr\ac\tec\convitec\catalogo\DisponibilidadSede.java
+C:\Users\tecni\IdeaProjects\conviTEC\src\main\java\cr\ac\tec\convitec\catalogo\ExistenciaInventario.java
+C:\Users\tecni\IdeaProjects\conviTEC\src\main\java\cr\ac\tec\convitec\catalogo\InventarioLocal.java
+C:\Users\tecni\IdeaProjects\conviTEC\src\main\java\cr\ac\tec\convitec\catalogo\ProductoCatalogo.java
+C:\Users\tecni\IdeaProjects\conviTEC\src\main\java\cr\ac\tec\convitec\catalogo\ReservaPersistida.java
+C:\Users\tecni\IdeaProjects\conviTEC\src\main\java\cr\ac\tec\convitec\catalogo\ServicioInventario.java
+C:\Users\tecni\IdeaProjects\conviTEC\src\main\java\cr\ac\tec\convitec\catalogo\ServicioInventarioException.java
 C:\Users\tecni\IdeaProjects\conviTEC\src\main\java\cr\ac\tec\convitec\config\ConfigException.java
 C:\Users\tecni\IdeaProjects\conviTEC\src\main\java\cr\ac\tec\convitec\config\ConfigSede.java
 C:\Users\tecni\IdeaProjects\conviTEC\src\main\java\cr\ac\tec\convitec\config\SedesConocidas.java
