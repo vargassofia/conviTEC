@@ -3,6 +3,9 @@ package cr.ac.tec.convitec.web;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
 import cr.ac.tec.convitec.config.ConfigSede;
+import cr.ac.tec.convitec.grafo.CargadorGrafo;
+import cr.ac.tec.convitec.grafo.Grafo;
+import cr.ac.tec.convitec.rutas.ServicioRutas;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,8 +36,15 @@ class ServidorWebTest {
     @BeforeEach
     void preparar() {
         config = ConfigSede.cargarDesdeRecurso("sedes/sede-ALA.properties");
-        servidor = new ServidorWeb(config, 0, relojALas("10:30"));
+        servidor = crear(config, 0, relojALas("10:30"));
         servidor.iniciar();
+    }
+
+    /** Servidor completo de una sede, con el grafo real y los pendientes de demostración. */
+    static ServidorWeb crear(ConfigSede config, int puerto, Clock reloj) {
+        Grafo grafo = CargadorGrafo.cargarDesdeRecurso("rutas.json");
+        return new ServidorWeb(config, grafo, new ServicioRutas(grafo, config.getNombre()),
+                new PendientesDemo(config.getNombre()), puerto, reloj);
     }
 
     @AfterEach
@@ -63,7 +73,7 @@ class ServidorWebTest {
     @Test
     void apiSedeConservaLasTildes() throws Exception {
         servidor.detener();
-        servidor = new ServidorWeb(ConfigSede.cargarDesdeRecurso("sedes/sede-SJO.properties"), 0, relojALas("10:30"));
+        servidor = crear(ConfigSede.cargarDesdeRecurso("sedes/sede-SJO.properties"), 0, relojALas("10:30"));
         servidor.iniciar();
 
         JsonObject json = JsonParser.parseString(get("/api/sede").body()).getAsJsonObject();
@@ -119,6 +129,8 @@ class ServidorWebTest {
         assertTipo("/js/app.js", "text/javascript");
         assertTipo("/js/api.js", "text/javascript");
         assertTipo("/img/icono.svg", "image/svg+xml");
+        assertTipo("/vendor/leaflet/leaflet.js", "text/javascript");
+        assertTipo("/vendor/leaflet/leaflet.css", "text/css");
     }
 
     @Test
@@ -150,7 +162,7 @@ class ServidorWebTest {
     @Test
     void puertoOcupadoDaUnMensajeClaro() {
         int ocupado = servidor.getPuerto();
-        ServidorWeb otro = new ServidorWeb(config, ocupado, relojALas("10:30"));
+        ServidorWeb otro = crear(config, ocupado, relojALas("10:30"));
 
         ServidorWebException e = assertThrows(ServidorWebException.class, otro::iniciar);
         assertTrue(e.getMessage().contains(String.valueOf(ocupado)));
@@ -167,7 +179,7 @@ class ServidorWebTest {
         assertThrows(IllegalStateException.class, servidor::getPuerto);
 
         // El puerto quedó libre: otro servidor lo puede usar
-        servidor = new ServidorWeb(config, puerto, relojALas("10:30"));
+        servidor = crear(config, puerto, relojALas("10:30"));
         servidor.iniciar();
         assertEquals(puerto, servidor.getPuerto());
     }
@@ -182,10 +194,18 @@ class ServidorWebTest {
 
     @Test
     void datosInvalidos() {
-        assertThrows(IllegalArgumentException.class, () -> new ServidorWeb(null));
-        assertThrows(IllegalArgumentException.class, () -> new ServidorWeb(config, -1, Clock.systemDefaultZone()));
-        assertThrows(IllegalArgumentException.class, () -> new ServidorWeb(config, 70000, Clock.systemDefaultZone()));
-        assertThrows(IllegalArgumentException.class, () -> new ServidorWeb(config, 0, null));
+        Grafo grafo = CargadorGrafo.cargarDesdeRecurso("rutas.json");
+        ServicioRutas rutas = new ServicioRutas(grafo, "Alajuela");
+        PendientesDemo demo = new PendientesDemo("Alajuela");
+        Clock reloj = Clock.systemDefaultZone();
+
+        assertThrows(IllegalArgumentException.class, () -> new ServidorWeb(null, grafo, rutas, demo));
+        assertThrows(IllegalArgumentException.class, () -> new ServidorWeb(config, null, rutas, demo));
+        assertThrows(IllegalArgumentException.class, () -> new ServidorWeb(config, grafo, null, demo));
+        assertThrows(IllegalArgumentException.class, () -> new ServidorWeb(config, grafo, rutas, null));
+        assertThrows(IllegalArgumentException.class, () -> new ServidorWeb(config, grafo, rutas, demo, -1, reloj));
+        assertThrows(IllegalArgumentException.class, () -> new ServidorWeb(config, grafo, rutas, demo, 70000, reloj));
+        assertThrows(IllegalArgumentException.class, () -> new ServidorWeb(config, grafo, rutas, demo, 0, null));
     }
 
     // ------------------------------------------------------------------
@@ -194,7 +214,7 @@ class ServidorWebTest {
 
     private void assertProximaSalida(String ahora, String hora, boolean diaSiguiente) throws Exception {
         servidor.detener();
-        servidor = new ServidorWeb(config, 0, relojALas(ahora));
+        servidor = crear(config, 0, relojALas(ahora));
         servidor.iniciar();
 
         JsonObject salida = JsonParser.parseString(get("/api/sede").body()).getAsJsonObject()

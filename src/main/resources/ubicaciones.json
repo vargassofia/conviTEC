@@ -1,0 +1,18 @@
+{
+  "comentario": "Coordenadas (latitud, longitud) de cada ubicación del grafo, solo para dibujarla en el mapa. Los nombres deben coincidir con los de rutas.json (se ignoran tildes y mayúsculas). Los tiempos y caminos salen SIEMPRE del grafo, no de estas coordenadas.",
+  "ubicaciones": [
+    { "nombre": "Liberia",    "lat": 10.6346, "lng": -85.4377 },
+    { "nombre": "Cañas",      "lat": 10.4286, "lng": -85.0920 },
+    { "nombre": "Puntarenas", "lat": 9.9763,  "lng": -84.8384 },
+    { "nombre": "Orotina",    "lat": 9.9116,  "lng": -84.5246 },
+    { "nombre": "Alajuela",   "lat": 10.0163, "lng": -84.2116 },
+    { "nombre": "Heredia",    "lat": 9.9986,  "lng": -84.1170 },
+    { "nombre": "San José",   "lat": 9.9281,  "lng": -84.0907 },
+    { "nombre": "Cartago",    "lat": 9.8644,  "lng": -83.9194 },
+    { "nombre": "Paraíso",    "lat": 9.8384,  "lng": -83.8656 },
+    { "nombre": "Turrialba",  "lat": 9.9046,  "lng": -83.6833 },
+    { "nombre": "Guápiles",   "lat": 10.2154, "lng": -83.7847 },
+    { "nombre": "Siquirres",  "lat": 10.0976, "lng": -83.5065 },
+    { "nombre": "Limón",      "lat": 9.9907,  "lng": -83.0360 }
+  ]
+}

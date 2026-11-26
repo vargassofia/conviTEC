@@ -4,6 +4,7 @@ import cr.ac.tec.convitec.config.ConfigException;
 import cr.ac.tec.convitec.config.ConfigSede;
 import cr.ac.tec.convitec.grafo.GrafoException;
 import cr.ac.tec.convitec.mensajeria.MensajeriaException;
+import cr.ac.tec.convitec.web.PendientesDemo;
 import cr.ac.tec.convitec.web.ServidorWeb;
 import cr.ac.tec.convitec.web.ServidorWebException;
 
@@ -69,7 +70,9 @@ public final class Main {
 
         // Interfaz web + API REST en config.getPuertoHttp() (LIB 8081, ALA 8082, SJO 8083, LIM 8084).
         // El servidor atiende en su propio hilo; la consola sigue en este.
-        ServidorWeb servidorWeb = new ServidorWeb(config);
+        // TODO PERSONA 2: cambiar PendientesDemo por el gestor de pedidos real cuando implemente FuentePendientes.
+        ServidorWeb servidorWeb = new ServidorWeb(config, sede.getGrafo(), sede.getServicioRutas(),
+                new PendientesDemo(config.getNombre()));
         try {
             servidorWeb.iniciar();
         } catch (ServidorWebException e) {

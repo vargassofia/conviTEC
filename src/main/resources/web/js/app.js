@@ -2,6 +2,8 @@
 // Cada sección se muestra en <main id="contenido"> según el #hash de la dirección (#inicio, #entregas...).
 
 import { obtener } from './api.js';
+import { montarEntregas } from './entregas.js';
+import { escapar, textoSalida } from './util.js';
 
 const ICONOS = {
   inicio: '<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/><path d="M10 20v-6h4v6"/>',
@@ -36,7 +38,7 @@ const SECCIONES = [
     id: 'entregas',
     titulo: 'Entregas',
     descripcion: 'Recorrido del vehículo en el mapa, paso a paso.',
-    pronto: 'Aquí verá el mapa con las rutas de entrega y el botón “Calcular siguiente punto de entrega”.',
+    montar: montarEntregas,
   },
   {
     id: 'inventario',
@@ -55,30 +57,14 @@ const SECCIONES = [
 const SECCION_INICIAL = 'inicio';
 
 let sede = null; // datos de /api/sede
+let desmontarSeccion = null; // limpia la sección anterior (por ejemplo, destruye el mapa)
 
 // ---------------------------------------------------------------------------
 // Utilidades
 // ---------------------------------------------------------------------------
 
-/** Escapa texto antes de ponerlo en HTML. */
-export function escapar(texto) {
-  return String(texto ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;');
-}
-
 function icono(id) {
   return `<svg class="icono" viewBox="0 0 24 24" aria-hidden="true">${ICONOS[id] || ''}</svg>`;
-}
-
-function textoSalida(salida) {
-  if (!salida) {
-    return '';
-  }
-  return salida.diaSiguiente ? `${salida.hora} (mañana)` : `${salida.hora} (hoy)`;
 }
 
 function mostrarAvisoConexion(mensaje) {
@@ -193,8 +179,17 @@ function mostrarSeccion() {
     location.hash = SECCION_INICIAL;
     return;
   }
+  if (desmontarSeccion) {
+    desmontarSeccion();
+    desmontarSeccion = null;
+  }
   const contenido = document.getElementById('contenido');
-  contenido.innerHTML = seccion.id === 'inicio' ? vistaInicio(seccion) : vistaEnConstruccion(seccion);
+  if (seccion.montar) {
+    contenido.innerHTML = encabezadoSeccion(seccion);
+    desmontarSeccion = seccion.montar(contenido, sede) || null;
+  } else {
+    contenido.innerHTML = seccion.id === 'inicio' ? vistaInicio(seccion) : vistaEnConstruccion(seccion);
+  }
   marcarSeccionActiva(seccion.id);
   contenido.focus({ preventScroll: true });
   window.scrollTo(0, 0);
