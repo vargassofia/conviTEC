@@ -24,7 +24,7 @@ public class InventarioLocal implements IInventarioLocal {
     /** Reserva unidades; repetir una reserva existente del mismo pedido es idempotente. */
     @Override
     public synchronized RespuestaReserva reservar(String idPedido, String codigoProducto, int cantidad) {
-        if (!textoValido(idPedido) || !codigoValido(codigoProducto)) {
+        if (textoInvalido(idPedido) || codigoInvalido(codigoProducto)) {
             return RespuestaReserva.rechazo(null, "faltan idPedido o código de producto");
         }
         if (cantidad <= 0) {
@@ -55,7 +55,7 @@ public class InventarioLocal implements IInventarioLocal {
     /** Confirma una reserva y devuelve el stock disponible nuevo; es idempotente. */
     @Override
     public synchronized int confirmar(String idPedido, String codigoProducto) {
-        if (!textoValido(idPedido) || !codigoValido(codigoProducto)) {
+        if (textoInvalido(idPedido) || codigoInvalido(codigoProducto)) {
             return obtenerDisponibleInterno(codigoProducto);
         }
         String codigo = normalizarCodigo(codigoProducto);
@@ -74,7 +74,7 @@ public class InventarioLocal implements IInventarioLocal {
     /** Libera una reserva y devuelve sus unidades al stock disponible; es idempotente. */
     @Override
     public synchronized void liberar(String idPedido, String codigoProducto) {
-        if (!textoValido(idPedido) || !codigoValido(codigoProducto)) {
+        if (textoInvalido(idPedido) || codigoInvalido(codigoProducto)) {
             return;
         }
         String codigo = normalizarCodigo(codigoProducto);
@@ -94,7 +94,7 @@ public class InventarioLocal implements IInventarioLocal {
     public synchronized int agregarUnidades(String codigoProducto, int cantidad) {
         validarCodigoYcantidad(codigoProducto, cantidad);
         String codigo = normalizarCodigo(codigoProducto);
-        if (!catalogo.contieneProducto(codigo)) {
+        if (catalogo.obtenerProducto(codigo) == null) {
             throw new IllegalArgumentException("El producto " + codigo + " no existe en el catálogo");
         }
         Existencia existencia = existencias.buscar(codigo);
@@ -120,7 +120,7 @@ public class InventarioLocal implements IInventarioLocal {
 
     /** Devuelve los datos locales de un producto o null si no tiene existencia local. */
     public synchronized ExistenciaInventario consultar(String codigoProducto) {
-        if (!codigoValido(codigoProducto)) {
+        if (codigoInvalido(codigoProducto)) {
             throw new IllegalArgumentException("El código del producto no puede ser null ni vacío");
         }
         String codigo = normalizarCodigo(codigoProducto);
@@ -134,7 +134,7 @@ public class InventarioLocal implements IInventarioLocal {
 
     /** Devuelve las unidades disponibles locales, o -1 si no existe localmente. */
     public synchronized int obtenerDisponible(String codigoProducto) {
-        if (!codigoValido(codigoProducto)) {
+        if (codigoInvalido(codigoProducto)) {
             throw new IllegalArgumentException("El código del producto no puede ser null ni vacío");
         }
         return obtenerDisponibleInterno(normalizarCodigo(codigoProducto));
@@ -173,7 +173,7 @@ public class InventarioLocal implements IInventarioLocal {
                 throw new IllegalArgumentException("El arreglo contiene una existencia null");
             }
             String codigo = normalizarCodigo(existencia.getCodigoProducto());
-            if (!catalogo.contieneProducto(codigo)) {
+            if (catalogo.obtenerProducto(codigo) == null) {
                 throw new IllegalArgumentException("El producto " + codigo + " no existe en el catálogo");
             }
             if (!cargadas.insertar(codigo, existencia.copia())) {
@@ -204,8 +204,8 @@ public class InventarioLocal implements IInventarioLocal {
         }
         ArbolAVL<String, Integer> cargadas = new ArbolAVL<>();
         for (ReservaPersistida reserva : nuevasReservas) {
-            if (reserva == null || !textoValido(reserva.getIdPedido())
-                    || !codigoValido(reserva.getCodigoProducto()) || reserva.getCantidad() <= 0) {
+            if (reserva == null || textoInvalido(reserva.getIdPedido())
+                    || codigoInvalido(reserva.getCodigoProducto()) || reserva.getCantidad() <= 0) {
                 throw new IllegalArgumentException("El arreglo contiene una reserva inválida");
             }
             String codigo = normalizarCodigo(reserva.getCodigoProducto());
@@ -258,7 +258,7 @@ public class InventarioLocal implements IInventarioLocal {
     }
 
     private int obtenerDisponibleInterno(String codigoProducto) {
-        if (!codigoValido(codigoProducto)) {
+        if (codigoInvalido(codigoProducto)) {
             return -1;
         }
         Existencia existencia = existencias.buscar(normalizarCodigo(codigoProducto));
@@ -266,7 +266,7 @@ public class InventarioLocal implements IInventarioLocal {
     }
 
     private void validarCodigoYcantidad(String codigoProducto, int cantidad) {
-        if (!codigoValido(codigoProducto)) {
+        if (codigoInvalido(codigoProducto)) {
             throw new IllegalArgumentException("El código del producto no puede ser null ni vacío");
         }
         if (cantidad <= 0) {
@@ -274,12 +274,12 @@ public class InventarioLocal implements IInventarioLocal {
         }
     }
 
-    private boolean codigoValido(String codigo) {
-        return codigo != null && !codigo.trim().isEmpty() && codigo.indexOf('|') < 0;
+    private boolean codigoInvalido(String codigo) {
+        return codigo == null || codigo.trim().isEmpty() || codigo.indexOf('|') >= 0;
     }
 
-    private boolean textoValido(String texto) {
-        return texto != null && !texto.trim().isEmpty() && texto.indexOf('|') < 0;
+    private boolean textoInvalido(String texto) {
+        return texto == null || texto.trim().isEmpty() || texto.indexOf('|') >= 0;
     }
 
     private String normalizarCodigo(String codigo) {

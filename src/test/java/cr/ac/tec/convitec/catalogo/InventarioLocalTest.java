@@ -101,7 +101,10 @@ class InventarioLocalTest {
 
         assertEquals(2, listado.length);
         assertEquals("B01", listado[0].getCodigoProducto());
+        assertEquals("Bebida", listado[0].getNombreProducto());
         assertEquals(1000, listado[0].getPrecio());
+        assertEquals(5, listado[0].getCantidadDisponible());
+        assertEquals(0, listado[0].getCantidadReservada());
         assertEquals("C01", listado[1].getCodigoProducto());
         assertNull(inventario.consultar("S01"));
         assertThrows(IllegalArgumentException.class, () -> inventario.consultar(null));

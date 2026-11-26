@@ -29,9 +29,7 @@ public final class ProductoCatalogo {
             return new DisponibilidadSede[0];
         }
         DisponibilidadSede[] copia = new DisponibilidadSede[origen.length];
-        for (int i = 0; i < origen.length; i++) {
-            copia[i] = origen[i];
-        }
+        System.arraycopy(origen, 0, copia, 0, origen.length);
         return copia;
     }
 }

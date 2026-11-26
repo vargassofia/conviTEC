@@ -28,23 +28,22 @@ public class CatalogoGlobal implements ICatalogoGlobal {
     }
 
     /** Registra un producto nuevo o reemplaza el producto del mismo código. */
-    public synchronized boolean registrarProducto(Producto producto) {
+    public synchronized void registrarProducto(Producto producto) {
         if (producto == null) {
             throw new IllegalArgumentException("El producto no puede ser null");
         }
         String codigo = normalizarCodigo(producto.getCodigo());
         if (productos.contiene(codigo)) {
             productos.actualizar(codigo, producto);
-            return false;
+            return;
         }
         productos.insertar(codigo, producto);
-        return true;
     }
 
     /** Guarda el stock más reciente; descarta mensajes inválidos sin lanzar excepción. */
     @Override
     public synchronized void actualizarStock(String codigoSede, String codigoProducto, int cantidadNueva) {
-        if (!sedeValida(codigoSede) || !codigoValido(codigoProducto) || cantidadNueva < 0) {
+        if (!sedeValida(codigoSede) || codigoInvalido(codigoProducto) || cantidadNueva < 0) {
             mensajesDescartados++;
             return;
         }
@@ -60,7 +59,7 @@ public class CatalogoGlobal implements ICatalogoGlobal {
 
     /** Devuelve el último stock conocido para el producto, ordenado por código de sede. */
     public synchronized DisponibilidadSede[] disponibilidadDe(String codigoProducto) {
-        if (!codigoValido(codigoProducto)) {
+        if (codigoInvalido(codigoProducto)) {
             throw new IllegalArgumentException("El código del producto no puede ser null ni vacío");
         }
         String codigo = normalizarCodigo(codigoProducto);
@@ -96,7 +95,7 @@ public class CatalogoGlobal implements ICatalogoGlobal {
 
     /** Busca un producto por código o devuelve null si no está registrado. */
     public synchronized Producto obtenerProducto(String codigoProducto) {
-        if (!codigoValido(codigoProducto)) {
+        if (codigoInvalido(codigoProducto)) {
             return null;
         }
         return productos.buscar(normalizarCodigo(codigoProducto));
@@ -104,7 +103,10 @@ public class CatalogoGlobal implements ICatalogoGlobal {
 
     /** Indica si el producto está registrado en el catálogo global. */
     public synchronized boolean contieneProducto(String codigoProducto) {
-        return codigoValido(codigoProducto) && productos.contiene(normalizarCodigo(codigoProducto));
+        if (codigoInvalido(codigoProducto)) {
+            return false;
+        }
+        return productos.contiene(normalizarCodigo(codigoProducto));
     }
 
     /** Devuelve la cantidad de mensajes de stock descartados por inválidos. */
@@ -125,8 +127,8 @@ public class CatalogoGlobal implements ICatalogoGlobal {
         return false;
     }
 
-    private boolean codigoValido(String codigo) {
-        return codigo != null && !codigo.trim().isEmpty() && codigo.indexOf('|') < 0;
+    private boolean codigoInvalido(String codigo) {
+        return codigo == null || codigo.trim().isEmpty() || codigo.indexOf('|') >= 0;
     }
 
     private String normalizarCodigo(String codigo) {
