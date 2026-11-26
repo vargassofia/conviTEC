@@ -438,3 +438,34 @@ Nota 30 - Huecos marcados y PENDIENTES.md
 - SedeArranqueTest arranca las 4 sedes con lo que diga Sede.conDemostracion y una mensajeria falsa (sin RabbitMQ). Si despues de cambiar las clases demo esa prueba falla, el cambio rompio el arranque.
 
 Total de pruebas: 166.
+
+
+Nota 31 - Persona 2: desarrollos disponibles (actualización)
+Estas notas describen lo implementado por la Persona 2 y complementan las notas anteriores. Si una nota anterior dice que una clase está vacía o pendiente, tomen esta sección como el estado más reciente.
+
+Clases y paquetes incorporados:
+- modelo.Producto, modelo.Existencia, modelo.EstadoPedido, modelo.DetallePedido y modelo.Pedido.
+- catalogo.CatalogoGlobal, catalogo.InventarioLocal y catalogo.ServicioInventario.
+- pedidos.ServicioPedidos, pedidos.SolicitudLinea y pedidos.ResultadoPedido.
+- Las clases de inventario y catálogo están en `catalogo`; no busquen implementaciones actuales en un paquete `inventario`.
+
+El inventario y el servicio de pedidos trabajan con arreglos y estructuras propias; no usan colecciones ni ordenamientos de `java.util`. Las consultas públicas de estos servicios devuelven arreglos o DTOs, no exponen las estructuras internas. Los pedidos tienen estados EN_PROCESO, CONFIRMADO, CANCELADO y ENTREGADO. Las líneas repetidas se agrupan antes de reservar; las unidades pueden repartirse entre la sede local y varias sedes remotas.
+
+El estado se puede exportar e importar mediante `InventarioLocal.exportarExistencias/cargarExistencias`, `exportarReservas/cargarReservas` y `ServicioPedidos.exportarPedidos/cargarPedidos`. Estos métodos entregan los datos a la tarea de persistencia; por sí solos no escriben ni leen archivos. `RepositorioVentasMemoria` también sigue siendo una implementación en memoria, no persistencia durable.
+
+Nota 32 - Para Persona 1: integración con inventario y pedidos
+- Para consultar o modificar inventario, usar `catalogo.ServicioInventario`: `consultarInventarioLocal()` devuelve `ExistenciaInventario[]`; `consultarCatalogoGlobal()` devuelve `ProductoCatalogo[]`; `agregarUnidades(codigo, cantidad)` y `descontar(codigo, cantidad)` devuelven el stock nuevo y publican la actualización.
+- Si falla la publicación después de agregar o descontar, la operación local ya ocurrió. `ServicioInventarioException` informa del fallo de comunicación; no se debe repetir automáticamente la modificación, porque podría duplicar el cambio.
+- Para registrar pedidos, `pedidos.ServicioPedidos.registrarPedido(destino, SolicitudLinea[])` devuelve `ResultadoPedido`. Revisar `isAceptado()`, `getMotivo()` y `getPedido()` para comunicar aceptación o rechazo. Tanto pedidos confirmados como cancelados quedan en el historial; los cancelados no aparecen en `listarPendientes()`.
+- `listarPendientes()`, `listarHistorial()`, `buscarPorId(id)`, `construirSolicitudesEntrega()` y `exportarPedidos()` devuelven copias/arreglos. No modificar esos resultados esperando cambiar el estado guardado.
+- `ServicioPedidos` se construye con el nombre y código de la sede, su `InventarioLocal`, `CatalogoGlobal`, `IMensajeria` y `IServicioRutas`. La API debe recibir la instancia configurada para esa sede, no crear otra instancia para cada solicitud.
+- La sede todavía requiere cableado para exponer el servicio de pedidos y el servicio de inventario a la API. `Sede.conDemostracion` conserva actualmente sus dependencias demo; coordinar este cambio antes de conectar la aplicación web.
+
+Nota 33 - Para Persona 3: contratos e integración entre módulos
+- No cambiar las firmas de `IInventarioLocal`, `ICatalogoGlobal`, `IMensajeria`, `IServicioRutas` ni `IGestorPedidos`. Las implementaciones de Persona 2 consumen esos contratos existentes.
+- `ServicioPedidos` implementa `IGestorPedidos`: `obtenerDetalle(idPedido)` devuelve `DetalleVenta[]` o null si no encuentra el id; `marcarEntregado(idPedido, fechaHora)` es idempotente y quita de pendientes los pedidos que pasan a ENTREGADO.
+- `ServicioEntregas` puede recibir `ServicioPedidos` como `IGestorPedidos`. El flujo de entrega debe tomar solamente los ids de `construirSolicitudesEntrega()`/`listarPendientes()`: un pedido cancelado no se debe enviar al planificador.
+- El pedido reserva primero: usa el inventario local y luego consulta el stock conocido en `CatalogoGlobal`, empezando por la sede remota con más disponibilidad. Después valida `IServicioRutas.existeRuta(origen, destino)`. Ante rechazo, timeout o falta de ruta, intenta liberar las reservas, incluso en la sede que rechazó o no respondió, porque la liberación es idempotente.
+- Si todo se valida, confirma el inventario local, publica cada stock local nuevo y envía `confirmarReserva` a las sedes remotas. Un error al publicar o confirmar remotamente se reporta como motivo/advertencia del resultado, pero no revierte un pedido cuyo stock local ya fue confirmado; coordinar la estrategia de reintento con mensajería para evitar repetir confirmaciones de negocio.
+- Al agregar o descontar stock mediante `ServicioInventario`, la publicación la realiza esa fachada. No publicar una segunda actualización desde la API para la misma operación. La confirmación de una reserva remota la procesa la mensajería y publica el stock de la sede proveedora.
+- El almacenamiento a disco todavía debe integrarse por separado: los métodos exportar/cargar son puntos de entrada para serializar y restaurar el estado, no sustituyen `IRepositorioVentas` persistente ni la lectura de archivos al arrancar.
