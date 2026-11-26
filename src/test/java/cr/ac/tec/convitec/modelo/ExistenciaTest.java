@@ -163,8 +163,8 @@ class ExistenciaTest {
         assertEquals(primera, igual);
         assertEquals(primera.hashCode(), igual.hashCode());
         assertNotEquals(primera, distinta);
-        assertNotEquals(primera, null);
-        assertNotEquals(primera, "P-01");
+        assertNotEquals(null, primera);
+        assertNotEquals("P-01", primera);
         assertTrue(primera.toString().contains("P-01"));
         assertTrue(primera.toString().contains("cantidadDisponible=8"));
         assertTrue(primera.toString().contains("cantidadReservada=2"));
