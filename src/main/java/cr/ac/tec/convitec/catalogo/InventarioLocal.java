@@ -4,6 +4,7 @@ import cr.ac.tec.convitec.estructuras.ArbolAVL;
 import cr.ac.tec.convitec.mensajeria.RespuestaReserva;
 import cr.ac.tec.convitec.modelo.Existencia;
 import cr.ac.tec.convitec.modelo.Producto;
+import cr.ac.tec.convitec.persistencia.OyenteCambios;
 import cr.ac.tec.convitec.servicios.IInventarioLocal;
 
 /** Inventario sincronizado de una sede y reservas asociadas a pedidos externos. */
@@ -12,6 +13,9 @@ public class InventarioLocal implements IInventarioLocal {
     private final CatalogoGlobal catalogo;
     private ArbolAVL<String, Existencia> existencias = new ArbolAVL<>();
     private ArbolAVL<String, Integer> reservas = new ArbolAVL<>();
+    private OyenteCambios oyenteCambios;
+    private int profundidadSilencio;
+    private boolean cambioDuranteSilencio;
 
     /** Crea un inventario local asociado al catálogo global de esta sede. */
     public InventarioLocal(CatalogoGlobal catalogo) {
@@ -49,6 +53,7 @@ public class InventarioLocal implements IInventarioLocal {
         }
         existencia.reservar(cantidad);
         reservas.insertar(claveReserva, cantidad);
+        notificarCambio();
         return RespuestaReserva.ok(null);
     }
 
@@ -67,6 +72,7 @@ public class InventarioLocal implements IInventarioLocal {
                 existencia.confirmar(cantidad);
             }
             reservas.eliminar(clave);
+            notificarCambio();
         }
         return obtenerDisponibleInterno(codigo);
     }
@@ -88,6 +94,7 @@ public class InventarioLocal implements IInventarioLocal {
             existencia.liberar(cantidad);
         }
         reservas.eliminar(clave);
+        notificarCambio();
     }
 
     /** Agrega stock disponible y crea la existencia local si el producto está en el catálogo. */
@@ -103,6 +110,7 @@ public class InventarioLocal implements IInventarioLocal {
             existencias.insertar(codigo, existencia);
         }
         existencia.agregar(cantidad);
+        notificarCambio();
         return existencia.getCantidadDisponible();
     }
 
@@ -115,6 +123,7 @@ public class InventarioLocal implements IInventarioLocal {
             throw new IllegalArgumentException("El producto " + codigo + " no tiene existencia local");
         }
         existencia.descontar(cantidad);
+        notificarCambio();
         return existencia.getCantidadDisponible();
     }
 
@@ -227,6 +236,54 @@ public class InventarioLocal implements IInventarioLocal {
     /** Devuelve las cantidades del producto localmente reservado para un pedido. */
     public synchronized int getCantidadReservas() {
         return reservas.tamano();
+    }
+
+    /** Configura la persistencia que se notificará después de cada cambio exitoso. */
+    public synchronized void setOyenteCambios(OyenteCambios oyente) {
+        oyenteCambios = oyente;
+    }
+
+    /** Suspende avisos durante una operación compuesta; el estado se guarda al finalizar. */
+    public synchronized void iniciarOperacionCompuesta() {
+        profundidadSilencio++;
+    }
+
+    /** Reanuda avisos y emite uno si cambió el inventario durante la operación compuesta. */
+    public synchronized void finalizarOperacionCompuesta() {
+        if (profundidadSilencio == 0) {
+            throw new IllegalStateException("No hay una operación compuesta activa");
+        }
+        profundidadSilencio--;
+        if (profundidadSilencio == 0 && cambioDuranteSilencio) {
+            cambioDuranteSilencio = false;
+            notificarCambioDirecto();
+        }
+    }
+
+    /** Restaura existencias y reservas sin notificar cambios al oyente. */
+    public synchronized void restaurar(Existencia[] nuevasExistencias, ReservaPersistida[] nuevasReservas) {
+        OyenteCambios oyenteAnterior = oyenteCambios;
+        oyenteCambios = null;
+        try {
+            cargarExistencias(nuevasExistencias);
+            cargarReservas(nuevasReservas);
+        } finally {
+            oyenteCambios = oyenteAnterior;
+        }
+    }
+
+    private void notificarCambio() {
+        if (profundidadSilencio > 0) {
+            cambioDuranteSilencio = true;
+            return;
+        }
+        notificarCambioDirecto();
+    }
+
+    private void notificarCambioDirecto() {
+        if (oyenteCambios != null) {
+            oyenteCambios.alCambiar();
+        }
     }
 
     private void validarTotalesReservados(ArbolAVL<String, Integer> reservasCargadas) {

@@ -1,14 +1,19 @@
 package cr.ac.tec.convitec.app;
 
 import cr.ac.tec.convitec.config.ConfigSede;
-import cr.ac.tec.convitec.demo.CatalogoGlobalDemo;
-import cr.ac.tec.convitec.demo.InventarioDemo;
-import cr.ac.tec.convitec.entregas.RepositorioVentasMemoria;
+import cr.ac.tec.convitec.catalogo.CatalogoGlobal;
+import cr.ac.tec.convitec.catalogo.InventarioLocal;
+import cr.ac.tec.convitec.catalogo.ServicioInventario;
+import cr.ac.tec.convitec.entregas.ServicioEntregas;
 import cr.ac.tec.convitec.estadisticas.ServicioEstadisticas;
 import cr.ac.tec.convitec.grafo.CargadorGrafo;
 import cr.ac.tec.convitec.grafo.Grafo;
 import cr.ac.tec.convitec.grafo.GrafoException;
 import cr.ac.tec.convitec.mensajeria.MensajeriaRabbit;
+import cr.ac.tec.convitec.persistencia.PersistenciaSede;
+import cr.ac.tec.convitec.persistencia.RecuperacionSede;
+import cr.ac.tec.convitec.persistencia.ResultadoRecuperacion;
+import cr.ac.tec.convitec.pedidos.ServicioPedidos;
 import cr.ac.tec.convitec.rutas.ServicioRutas;
 import cr.ac.tec.convitec.servicios.ICatalogoGlobal;
 import cr.ac.tec.convitec.servicios.IInventarioLocal;
@@ -19,9 +24,7 @@ import cr.ac.tec.convitec.servicios.IRepositorioVentas;
  * Todo lo de UNA sede, armado a partir de su ConfigSede: grafo y rutas, ventas, estadísticas,
  * inventario, catálogo global y mensajería.
  *
- * Las dependencias de la Persona 2 (inventario, catálogo, repositorio de ventas) se reciben por
- * constructor. Mientras no existan, se usa conDemostracion(config), que arma la sede con las
- * clases PROVISIONALES del paquete demo.
+ * La sede carga su inventario, catálogo, pedidos y ventas desde la carpeta local configurada.
  *
  * Uso:
  *   Sede sede = Sede.conDemostracion(config);
@@ -39,22 +42,23 @@ public class Sede {
     private final IRepositorioVentas repositorioVentas;
     private final ServicioEstadisticas estadisticas;
     private final IMensajeria mensajeria;
+    private final ServicioInventario servicioInventario;
+    private final ServicioPedidos servicioPedidos;
+    private final ServicioEntregas servicioEntregas;
+    private final ResultadoRecuperacion recuperacion;
 
     private boolean iniciada;
     private boolean cerrada;
 
     /**
-     * Sede con las clases de DEMOSTRACIÓN (provisionales) y mensajería RabbitMQ real.
-     * Es la que usa Main.
+     * Recupera una sede desde sus archivos locales; usa RabbitMQ real si no se inyecta mensajería.
      */
     public static Sede conDemostracion(ConfigSede config) {
         return conDemostracion(config, null);
     }
 
     /**
-     * Arma la sede con sus dependencias. Aquí están las ÚNICAS líneas que la Persona 2 debe
-     * cambiar para conectar sus clases reales (marcadas con comentarios TODO para la Persona 2).
-     * SedeArranqueTest usa este mismo método: si deja de pasar, el cambio rompió el arranque.
+     * Arma la sede recuperando el estado local antes de habilitar RabbitMQ.
      *
      * @param mensajeria null = MensajeriaRabbit real; las pruebas pasan una falsa (SedeArranqueTest).
      */
@@ -63,28 +67,12 @@ public class Sede {
             throw new IllegalArgumentException("La sede necesita su configuración.");
         }
 
-        // TODO PERSONA 2: implementar IInventarioLocal (servicios) con su inventario real, guardado en archivos
-        //   dentro de config.getCarpetaDatos(), y reemplazar aquí la clase de demo InventarioDemo.
-        //   Debe ser synchronized y confirmar/liberar deben ser idempotentes (ver IInventarioLocal).
-        IInventarioLocal inventario = InventarioDemo.paraSede(config.getCodigo());
-
-        // TODO PERSONA 2: implementar ICatalogoGlobal (servicios) con su catálogo global (AVL propio)
-        //   y reemplazar aquí la clase de demo CatalogoGlobalDemo. Debe ser synchronized.
-        ICatalogoGlobal catalogo = new CatalogoGlobalDemo();
-
-        // TODO PERSONA 2: implementar IRepositorioVentas (servicios) guardando las ventas en archivos
-        //   dentro de config.getCarpetaDatos(), y reemplazar aquí RepositorioVentasMemoria.
-        IRepositorioVentas repositorioVentas = new RepositorioVentasMemoria();
-
-        // TODO PERSONA 2: implementar IGestorPedidos (servicios) con su registro de pedidos. Cuando exista,
-        //   agregarlo como dependencia de Sede y crear con él el servicio de entregas:
-        //   new ServicioEntregas(config.getNombre(), gestorPedidos, repositorioVentas)  (paquete entregas).
-        //   Hoy no hay gestor, por eso la sede todavía no registra entregas como ventas.
-
-        if (mensajeria == null) {
-            return new Sede(config, inventario, catalogo, repositorioVentas);
-        }
-        return new Sede(config, inventario, catalogo, repositorioVentas, mensajeria);
+        Grafo grafo = CargadorGrafo.cargarDesdeRecurso("rutas.json");
+        ServicioRutas rutas = new ServicioRutas(grafo, config.getNombre());
+        PersistenciaSede persistencia = new PersistenciaSede(config.getCarpetaDatos());
+        ResultadoRecuperacion recuperacion = new RecuperacionSede(persistencia)
+                .recuperar(config, rutas, mensajeria);
+        return new Sede(config, grafo, rutas, recuperacion);
     }
 
     /** Sede con mensajería RabbitMQ real. */
@@ -102,23 +90,43 @@ public class Sede {
      */
     public Sede(ConfigSede config, IInventarioLocal inventario, ICatalogoGlobal catalogo,
                 IRepositorioVentas repositorioVentas, IMensajeria mensajeria) {
+        this(config, null, null, inventario, catalogo, repositorioVentas, mensajeria, null);
+    }
+
+    private Sede(ConfigSede config, Grafo grafo, ServicioRutas rutas, ResultadoRecuperacion recuperacion) {
+        this(config, grafo, rutas, recuperacion.getInventario(), recuperacion.getCatalogo(),
+                recuperacion.getRepositorioVentas(), recuperacion.getMensajeria(), recuperacion);
+    }
+
+    private Sede(ConfigSede config, Grafo grafoPreparado, ServicioRutas rutasPreparadas,
+                 IInventarioLocal inventario, ICatalogoGlobal catalogo,
+                 IRepositorioVentas repositorioVentas, IMensajeria mensajeria,
+                 ResultadoRecuperacion recuperacion) {
         if (config == null || inventario == null || catalogo == null || repositorioVentas == null
                 || mensajeria == null) {
             throw new IllegalArgumentException("La sede necesita configuración, inventario, catálogo, "
                     + "repositorio de ventas y mensajería (ninguno puede ser nulo).");
         }
         this.config = config;
-        this.grafo = CargadorGrafo.cargarDesdeRecurso("rutas.json");
+        this.grafo = grafoPreparado == null ? CargadorGrafo.cargarDesdeRecurso("rutas.json") : grafoPreparado;
         if (!grafo.existeVertice(config.getNombre())) {
             throw new GrafoException("La sede '" + config.getNombre() + "' (sede.nombre) no existe en el mapa "
                     + "de rutas. Revise el archivo de configuración.");
         }
-        this.servicioRutas = new ServicioRutas(grafo, config.getNombre());
+        this.servicioRutas = rutasPreparadas == null
+                ? new ServicioRutas(grafo, config.getNombre()) : rutasPreparadas;
         this.inventario = inventario;
         this.catalogo = catalogo;
         this.repositorioVentas = repositorioVentas;
         this.estadisticas = new ServicioEstadisticas(config.getNombre(), repositorioVentas);
         this.mensajeria = mensajeria;
+        this.recuperacion = recuperacion;
+        this.servicioInventario = inventario instanceof InventarioLocal inventarioLocal
+                && catalogo instanceof CatalogoGlobal catalogoGlobal
+                ? new ServicioInventario(inventarioLocal, catalogoGlobal, mensajeria) : null;
+        this.servicioPedidos = recuperacion == null ? null : recuperacion.getServicioPedidos();
+        this.servicioEntregas = servicioPedidos == null ? null
+                : new ServicioEntregas(config.getNombre(), servicioPedidos, repositorioVentas);
     }
 
     /**
@@ -133,6 +141,13 @@ public class Sede {
         if (!iniciada) {
             mensajeria.iniciar();
             iniciada = true;
+            if (recuperacion != null) {
+                for (cr.ac.tec.convitec.persistencia.LiberacionPendiente liberacion
+                        : recuperacion.getLiberacionesPendientes()) {
+                    mensajeria.liberarReserva(liberacion.getCodigoSede(), liberacion.getIdPedido(),
+                            liberacion.getCodigoProducto());
+                }
+            }
         }
     }
 
@@ -193,5 +208,21 @@ public class Sede {
 
     public IMensajeria getMensajeria() {
         return mensajeria;
+    }
+
+    public ServicioInventario getServicioInventario() {
+        return servicioInventario;
+    }
+
+    public ServicioPedidos getServicioPedidos() {
+        return servicioPedidos;
+    }
+
+    public ServicioEntregas getServicioEntregas() {
+        return servicioEntregas;
+    }
+
+    public ResultadoRecuperacion getRecuperacion() {
+        return recuperacion;
     }
 }

@@ -11,8 +11,8 @@ public final class Pedido {
     private final LocalDateTime fechaCreacion;
     private EstadoPedido estado;
     private String motivoCancelacion;
-    private final DetallePedido[] detalles;
-    private final String[] sedesParticipantes;
+    private DetallePedido[] detalles;
+    private String[] sedesParticipantes;
     private LocalDateTime fechaEntrega;
 
     /** Crea un pedido con su estado y copias defensivas de los arreglos. */
@@ -74,6 +74,15 @@ public final class Pedido {
         return copia;
     }
 
+    /** Actualiza el plan de reservas mientras el pedido sigue en proceso. */
+    public void actualizarProgreso(DetallePedido[] nuevosDetalles, String[] nuevasSedes) {
+        if (estado != EstadoPedido.EN_PROCESO || nuevosDetalles == null || nuevasSedes == null) {
+            throw new IllegalStateException("Solo se actualiza el progreso de un pedido en proceso");
+        }
+        detalles = copiarDetalles(nuevosDetalles);
+        sedesParticipantes = copiarSedes(nuevasSedes);
+    }
+
     /** Devuelve la suma de los subtotales del pedido. */
     public double getMontoTotal() {
         double total = 0;
@@ -86,6 +95,14 @@ public final class Pedido {
     /** Devuelve la fecha de entrega, o null mientras no se haya entregado. */
     public LocalDateTime getFechaEntrega() {
         return fechaEntrega;
+    }
+
+    /** Restaura la fecha de entrega al reconstruir un pedido persistido. */
+    public void restaurarFechaEntrega(LocalDateTime fechaHora) {
+        if (estado != EstadoPedido.ENTREGADO || fechaHora == null) {
+            throw new IllegalArgumentException("La fecha solo se restaura para pedidos entregados");
+        }
+        fechaEntrega = fechaHora;
     }
 
     /** Cambia el estado del pedido a confirmado. */

@@ -56,6 +56,26 @@ class ServicioPedidosTest {
     }
 
     @Test
+    void persisteElPedidoEnProcesoAntesDeConfirmarlo() {
+        inventario.agregarUnidades("B01", 5);
+        boolean[] seGuardoEnProceso = {false};
+        servicio.setOyenteCambios(() -> {
+            for (var pedido : servicio.exportarPedidos()) {
+                if (pedido.getEstado() == EstadoPedido.EN_PROCESO) {
+                    seGuardoEnProceso[0] = true;
+                }
+            }
+        });
+
+        ResultadoPedido resultado = servicio.registrarPedido("Centro", new SolicitudLinea[]{
+                new SolicitudLinea("B01", 2)
+        });
+
+        assertTrue(seGuardoEnProceso[0]);
+        assertEquals(EstadoPedido.CONFIRMADO, resultado.getPedido().getEstado());
+    }
+
+    @Test
     void confirmaLocalPrimeroPublicaStockYLuegoConfirmaSedeRemota() {
         inventario.agregarUnidades("B01", 2);
         catalogo.actualizarStock("LIB", "B01", 4);

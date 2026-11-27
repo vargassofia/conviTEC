@@ -3,12 +3,15 @@ package cr.ac.tec.convitec.pedidos;
 import cr.ac.tec.convitec.catalogo.CatalogoGlobal;
 import cr.ac.tec.convitec.catalogo.DisponibilidadSede;
 import cr.ac.tec.convitec.catalogo.InventarioLocal;
+import cr.ac.tec.convitec.catalogo.ReservaPersistida;
 import cr.ac.tec.convitec.mensajeria.RespuestaReserva;
 import cr.ac.tec.convitec.modelo.DetallePedido;
 import cr.ac.tec.convitec.modelo.DetalleVenta;
 import cr.ac.tec.convitec.modelo.EstadoPedido;
 import cr.ac.tec.convitec.modelo.Pedido;
 import cr.ac.tec.convitec.modelo.Producto;
+import cr.ac.tec.convitec.persistencia.LiberacionPendiente;
+import cr.ac.tec.convitec.persistencia.OyenteCambios;
 import cr.ac.tec.convitec.rutas.SalidasDiarias;
 import cr.ac.tec.convitec.rutas.SolicitudEntrega;
 import cr.ac.tec.convitec.servicios.IGestorPedidos;
@@ -31,6 +34,7 @@ public class ServicioPedidos implements IGestorPedidos {
     private NodoPendiente primeroPendiente;
     private Pedido[] historial = new Pedido[0];
     private int contadorIds;
+    private OyenteCambios oyenteCambios;
 
     /** Crea el servicio para una sede con sus dependencias locales y de red. */
     public ServicioPedidos(String nombreSede, String codigoSede, InventarioLocal inventario,
@@ -49,6 +53,18 @@ public class ServicioPedidos implements IGestorPedidos {
 
     /** Registra y confirma un pedido, o lo cancela liberando todas sus reservas. */
     public synchronized ResultadoPedido registrarPedido(String destino, SolicitudLinea[] lineas) {
+        inventario.iniciarOperacionCompuesta();
+        ResultadoPedido resultado;
+        try {
+            resultado = registrarPedidoInterno(destino, lineas);
+        } finally {
+            inventario.finalizarOperacionCompuesta();
+        }
+        notificarCambio();
+        return resultado;
+    }
+
+    private ResultadoPedido registrarPedidoInterno(String destino, SolicitudLinea[] lineas) {
         String id = generarId();
         LocalDateTime fecha = LocalDateTime.now();
         String destinoLimpio = destino == null ? "" : destino.trim();
@@ -65,6 +81,11 @@ public class ServicioPedidos implements IGestorPedidos {
             return registrarCancelado(id, destinoLimpio, fecha, motivoValidacion);
         }
 
+        Pedido pedido = new Pedido(id, codigoSede, destinoLimpio, fecha, EstadoPedido.EN_PROCESO,
+                null, new DetallePedido[0], new String[]{codigoSede});
+        agregarHistorial(pedido);
+        notificarCambio();
+
         Reservacion[] reservasHechas = new Reservacion[agrupadas.length * 5];
         int cantidadReservas = 0;
         DetallePedido[] detalles = new DetallePedido[agrupadas.length * 5];
@@ -80,6 +101,9 @@ public class ServicioPedidos implements IGestorPedidos {
             }
             int tomarLocal = Math.min(restante, disponibleLocal);
             if (tomarLocal > 0) {
+                detalles[cantidadDetalles++] = crearDetalle(producto, tomarLocal, codigoSede);
+                actualizarProgreso(pedido, detalles, cantidadDetalles);
+                notificarCambio();
                 RespuestaReserva respuesta = inventario.reservar(id, producto.getCodigo(), tomarLocal);
                 if (respuesta == null || !respuesta.isExito()) {
                     motivoFallo = respuesta == null ? "El inventario local no respondió"
@@ -87,13 +111,12 @@ public class ServicioPedidos implements IGestorPedidos {
                     break;
                 }
                 reservasHechas[cantidadReservas++] = new Reservacion(codigoSede, producto.getCodigo());
-                detalles[cantidadDetalles++] = crearDetalle(producto, tomarLocal, codigoSede);
                 restante -= tomarLocal;
             }
 
             if (restante > 0) {
                 Distribucion distribucion = reservarEnOtrasSedes(id, producto, restante,
-                        reservasHechas, cantidadReservas, detalles, cantidadDetalles);
+                        reservasHechas, cantidadReservas, detalles, cantidadDetalles, pedido);
                 cantidadReservas = distribucion.cantidadReservas;
                 cantidadDetalles = distribucion.cantidadDetalles;
                 motivoFallo = distribucion.motivo;
@@ -118,16 +141,12 @@ public class ServicioPedidos implements IGestorPedidos {
             if (!fallosLiberacion.isEmpty()) {
                 motivoFallo += "; " + fallosLiberacion;
             }
-            return registrarCancelado(id, destinoLimpio, fecha, motivoFallo);
+            pedido.cancelar(motivoFallo);
+            return new ResultadoPedido(false, pedido, pedido.getMotivoCancelacion());
         }
-
-        String[] participantes = sedesParticipantes(detalles, cantidadDetalles);
-        Pedido pedido = new Pedido(id, codigoSede, destinoLimpio, fecha, EstadoPedido.EN_PROCESO,
-                null, copiarDetalles(detalles, cantidadDetalles), participantes);
 
         String advertenciaPublicacion = confirmarReservas(pedido, detalles, cantidadDetalles);
         pedido.confirmar();
-        agregarHistorial(pedido);
         agregarPendiente(pedido);
         return new ResultadoPedido(true, pedido,
                 advertenciaPublicacion.isEmpty() ? null : advertenciaPublicacion);
@@ -201,6 +220,7 @@ public class ServicioPedidos implements IGestorPedidos {
         pedido.marcarEntregado(fechaHora);
         if (pedido.getEstado() == EstadoPedido.ENTREGADO) {
             quitarPendiente(idPedido.trim());
+            notificarCambio();
         }
     }
 
@@ -246,6 +266,75 @@ public class ServicioPedidos implements IGestorPedidos {
         return contadorIds;
     }
 
+    /** Configura la persistencia que se notificará después de un cambio de pedido. */
+    public synchronized void setOyenteCambios(OyenteCambios oyente) {
+        oyenteCambios = oyente;
+    }
+
+    /** Restaura pedidos y consecutivo sin notificar cambios. */
+    public synchronized void restaurar(Pedido[] pedidos, int consecutivo) {
+        cargarPedidos(pedidos, consecutivo);
+    }
+
+    /**
+     * Cancela pedidos que quedaron EN_PROCESO tras una caída y devuelve las liberaciones remotas pendientes.
+     */
+    public synchronized LiberacionPendiente[] recuperarPedidosIncompletos() {
+        int cantidadLiberaciones = 0;
+        for (Pedido pedido : historial) {
+            if (pedido.getEstado() == EstadoPedido.EN_PROCESO
+                    || pedido.getEstado() == EstadoPedido.CANCELADO
+                    && "La sede se reinició antes de completar el pedido".equals(pedido.getMotivoCancelacion())) {
+                for (DetallePedido detalle : pedido.getDetalles()) {
+                    if (!codigoSede.equalsIgnoreCase(detalle.getSedeSurtidora())) {
+                        cantidadLiberaciones++;
+                    }
+                }
+            }
+        }
+        LiberacionPendiente[] liberaciones = new LiberacionPendiente[cantidadLiberaciones];
+        int indice = 0;
+        boolean cambiado = false;
+        for (Pedido pedido : historial) {
+            boolean enProceso = pedido.getEstado() == EstadoPedido.EN_PROCESO;
+            boolean canceladoPorReinicio = pedido.getEstado() == EstadoPedido.CANCELADO
+                    && "La sede se reinició antes de completar el pedido".equals(pedido.getMotivoCancelacion());
+            if (!enProceso && !canceladoPorReinicio) {
+                continue;
+            }
+            if (enProceso) {
+                ReservaPersistida[] reservas = inventario.exportarReservas();
+                for (ReservaPersistida reserva : reservas) {
+                    if (pedido.getId().equals(reserva.getIdPedido())) {
+                        inventario.liberar(reserva.getIdPedido(), reserva.getCodigoProducto());
+                    }
+                }
+            }
+            for (DetallePedido detalle : pedido.getDetalles()) {
+                if (enProceso && codigoSede.equalsIgnoreCase(detalle.getSedeSurtidora())) {
+                    inventario.liberar(pedido.getId(), detalle.getCodigoProducto());
+                } else if (!codigoSede.equalsIgnoreCase(detalle.getSedeSurtidora())) {
+                    liberaciones[indice++] = new LiberacionPendiente(detalle.getSedeSurtidora(),
+                            pedido.getId(), detalle.getCodigoProducto());
+                }
+            }
+            if (enProceso) {
+                pedido.cancelar("La sede se reinició antes de completar el pedido");
+                cambiado = true;
+            }
+        }
+        if (cambiado) {
+            notificarCambio();
+        }
+        return liberaciones;
+    }
+
+    private void notificarCambio() {
+        if (oyenteCambios != null) {
+            oyenteCambios.alCambiar();
+        }
+    }
+
     private String motivoValidacion;
 
     private LineaAgrupada[] agruparLineas(SolicitudLinea[] lineas) {
@@ -288,7 +377,8 @@ public class ServicioPedidos implements IGestorPedidos {
 
     private Distribucion reservarEnOtrasSedes(String id, Producto producto, int cantidadNecesaria,
                                                Reservacion[] reservasHechas, int cantidadReservas,
-                                               DetallePedido[] detalles, int cantidadDetalles) {
+                                               DetallePedido[] detalles, int cantidadDetalles,
+                                               Pedido pedido) {
         DisponibilidadSede[] disponibilidades = catalogo.disponibilidadDe(producto.getCodigo());
         boolean[] consideradas = new boolean[disponibilidades.length];
         int restante = cantidadNecesaria;
@@ -315,6 +405,9 @@ public class ServicioPedidos implements IGestorPedidos {
             DisponibilidadSede sede = disponibilidades[mejor];
             int porSolicitar = Math.min(restante, sede.getCantidadDisponible());
             reservasHechas[cantidadReservas++] = new Reservacion(sede.getCodigoSede(), producto.getCodigo());
+            detalles[cantidadDetalles++] = crearDetalle(producto, porSolicitar, sede.getCodigoSede());
+            actualizarProgreso(pedido, detalles, cantidadDetalles);
+            notificarCambio();
             RespuestaReserva respuesta;
             try {
                 respuesta = mensajeria.solicitarReserva(sede.getCodigoSede(), id,
@@ -332,7 +425,6 @@ public class ServicioPedidos implements IGestorPedidos {
                                 + producto.getCodigo()
                                 : motivo);
             }
-            detalles[cantidadDetalles++] = crearDetalle(producto, porSolicitar, sede.getCodigoSede());
             restante -= porSolicitar;
         }
         return new Distribucion(cantidadReservas, cantidadDetalles, null);
@@ -412,6 +504,10 @@ public class ServicioPedidos implements IGestorPedidos {
         String[] resultado = new String[cantidadSedes];
         System.arraycopy(sedes, 0, resultado, 0, cantidadSedes);
         return resultado;
+    }
+
+    private void actualizarProgreso(Pedido pedido, DetallePedido[] detalles, int cantidad) {
+        pedido.actualizarProgreso(copiarDetalles(detalles, cantidad), sedesParticipantes(detalles, cantidad));
     }
 
     private boolean contiene(String[] arreglo, int cantidad, String valor) {
