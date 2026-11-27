@@ -7,31 +7,33 @@ import cr.ac.tec.convitec.grafo.ResultadoRuta;
 import cr.ac.tec.convitec.mensajeria.RespuestaReserva;
 import cr.ac.tec.convitec.modelo.Venta;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
+import java.nio.file.Path;
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * Verifica que una sede COMPLETA arranca con las dependencias de Sede.conDemostracion
- * (hoy las de demo) y una mensajería falsa, sin RabbitMQ.
- *
- * Persona 2: cuando reemplacen las clases de demo en Sede.conDemostracion, corran
- * "mvn clean test". Si esta prueba falla, el cambio rompió el arranque de la sede o alguno
- * de los contratos básicos (no lanzar excepciones en casos normales, idempotencia, listas vacías).
+ * Verifica el arranque de las dependencias reales de una sede sin requerir RabbitMQ.
  */
 class SedeArranqueTest {
+
+    @TempDir
+    Path carpetaTemporal;
 
     @Test
     void lasCuatroSedesArrancanYCierran() {
         String[] codigos = SedesConocidas.codigos();
         for (int i = 0; i < codigos.length; i++) {
             String codigo = codigos[i];
-            ConfigSede config = ConfigSede.cargarDesdeRecurso("sedes/sede-" + codigo + ".properties");
+            ConfigSede config = configurarDatosTemporales(codigo);
             MensajeriaFalsa mensajeria = new MensajeriaFalsa();
 
-            Sede sede = Sede.conDemostracion(config, mensajeria);
+            Sede sede = Sede.crearDesdeConfiguracion(config, mensajeria);
             sede.iniciar();
             assertTrue(sede.estaIniciada(), codigo + " no quedó iniciada");
             assertEquals(1, mensajeria.inicios);
+            assertTrue(mensajeria.actualizaciones > 0,
+                    codigo + " no publicó su stock inicial a las demás sedes");
 
             // Todas las piezas existen
             assertNotNull(sede.getInventario(), codigo + ": falta inventario");
@@ -39,6 +41,8 @@ class SedeArranqueTest {
             assertNotNull(sede.getRepositorioVentas(), codigo + ": falta repositorio de ventas");
             assertNotNull(sede.getServicioRutas());
             assertNotNull(sede.getEstadisticas());
+            assertNotNull(sede.getServicioPedidos());
+            assertNotNull(sede.getServicioEntregas());
             assertSame(mensajeria, sede.getMensajeria());
 
             // Rutas: la sede está en el grafo
@@ -54,8 +58,8 @@ class SedeArranqueTest {
 
     @Test
     void contratosBasicosDeLasDependencias() {
-        ConfigSede config = ConfigSede.cargarDesdeRecurso("sedes/sede-ALA.properties");
-        Sede sede = Sede.conDemostracion(config, new MensajeriaFalsa());
+        ConfigSede config = configurarDatosTemporales("ALA");
+        Sede sede = Sede.crearDesdeConfiguracion(config, new MensajeriaFalsa());
         sede.iniciar();
         try {
             // IInventarioLocal: un producto que no existe se rechaza con motivo, sin excepción
@@ -86,7 +90,28 @@ class SedeArranqueTest {
 
     @Test
     void sinConfiguracionNoArranca() {
-        assertThrows(IllegalArgumentException.class, () -> Sede.conDemostracion(null));
-        assertThrows(IllegalArgumentException.class, () -> Sede.conDemostracion(null, new MensajeriaFalsa()));
+        assertThrows(IllegalArgumentException.class, () -> Sede.crearDesdeConfiguracion(null));
+        assertThrows(IllegalArgumentException.class,
+                () -> Sede.crearDesdeConfiguracion(null, new MensajeriaFalsa()));
+    }
+
+    @Test
+    void rutaDeLiberiaACartagoSeEvaluaContraElGrafoReal() {
+        Sede liberia = Sede.crearDesdeConfiguracion(configurarDatosTemporales("LIB"),
+                new MensajeriaFalsa());
+        try {
+            assertFalse(liberia.getServicioRutas().existeRuta("Liberia", "Cartago"),
+                    "El grafo actual mantiene Guanacaste aislado de Cartago.");
+        } finally {
+            liberia.cerrar();
+        }
+    }
+
+    private ConfigSede configurarDatosTemporales(String codigo) {
+        ConfigSede original = ConfigSede.cargarDesdeRecurso("sedes/sede-" + codigo + ".properties");
+        return new ConfigSede(original.getCodigo(), original.getNombre(), original.getPuertoHttp(),
+                original.getRabbitHost(), original.getRabbitPuerto(), original.getRabbitUsuario(),
+                original.getRabbitClave(), original.getTimeoutReservaMs(),
+                carpetaTemporal.resolve(codigo).toString());
     }
 }
