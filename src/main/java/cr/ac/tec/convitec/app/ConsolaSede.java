@@ -1,10 +1,10 @@
 package cr.ac.tec.convitec.app;
 
-import cr.ac.tec.convitec.demo.CatalogoGlobalDemo;
-import cr.ac.tec.convitec.demo.InventarioDemo;
 import cr.ac.tec.convitec.catalogo.ExistenciaInventario;
 import cr.ac.tec.convitec.catalogo.ProductoCatalogo;
 import cr.ac.tec.convitec.catalogo.ServicioInventario;
+import cr.ac.tec.convitec.demo.CatalogoGlobalDemo;
+import cr.ac.tec.convitec.demo.InventarioDemo;
 import cr.ac.tec.convitec.estadisticas.ProductoEstrella;
 import cr.ac.tec.convitec.estadisticas.ResumenProducto;
 import cr.ac.tec.convitec.modelo.DetallePedido;
@@ -18,6 +18,7 @@ import cr.ac.tec.convitec.rutas.ParadaEntrega;
 import cr.ac.tec.convitec.rutas.RecorridoEntrega;
 import cr.ac.tec.convitec.rutas.SalidasDiarias;
 import cr.ac.tec.convitec.rutas.SolicitudEntrega;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -189,6 +190,7 @@ public class ConsolaSede {
     // Comandos
     // ------------------------------------------------------------------
 
+    @SuppressWarnings("deprecation")
     private void stock() {
         ServicioInventario servicio = sede.getServicioInventario();
         if (servicio != null) {
@@ -212,11 +214,12 @@ public class ConsolaSede {
         }
         String[] lineas = ((InventarioDemo) sede.getInventario()).listarProductos();
         salida.println("Inventario de " + sede.getNombre() + ":");
-        for (int i = 0; i < lineas.length; i++) {
-            salida.println("  " + lineas[i]);
+        for (String linea : lineas) {
+            salida.println("  " + linea);
         }
     }
 
+    @SuppressWarnings("deprecation")
     private void catalogo() {
         ServicioInventario servicio = sede.getServicioInventario();
         if (servicio != null) {
@@ -247,11 +250,12 @@ public class ConsolaSede {
             return;
         }
         salida.println("Stock conocido de otras sedes:");
-        for (int i = 0; i < lineas.length; i++) {
-            salida.println("  " + lineas[i]);
+        for (String linea : lineas) {
+            salida.println("  " + linea);
         }
     }
 
+    @SuppressWarnings("deprecation")
     private void agregar(ComandoConsola c) {
         ServicioInventario servicio = sede.getServicioInventario();
         if (servicio != null) {

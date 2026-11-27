@@ -11,11 +11,9 @@ import cr.ac.tec.convitec.catalogo.ServicioInventario;
 import cr.ac.tec.convitec.config.ConfigSede;
 import cr.ac.tec.convitec.entregas.RepositorioVentasArchivo;
 import cr.ac.tec.convitec.entregas.ServicioEntregas;
-import cr.ac.tec.convitec.estadisticas.ServicioEstadisticas;
 import cr.ac.tec.convitec.grafo.CargadorGrafo;
 import cr.ac.tec.convitec.modelo.EstadoPedido;
 import cr.ac.tec.convitec.modelo.Existencia;
-import cr.ac.tec.convitec.modelo.Pedido;
 import cr.ac.tec.convitec.modelo.Producto;
 import cr.ac.tec.convitec.modelo.Venta;
 import cr.ac.tec.convitec.pedidos.ResultadoPedido;
@@ -49,6 +47,8 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 /** Flujos distribuidos completos usando cuatro sedes y un RabbitMQ local real. */
 class IntegracionSedesRabbitTest {
 
+    private static final long MAX_ESPERA_MS = 5000;
+    private static final String CODIGO_PRODUCTO_LOCAL = "C01";
     private static final String[] CODIGOS = {"ALA", "LIM", "SJO", "LIB"};
     private static final String[] NOMBRES = {"Alajuela", "Limón", "San José", "Liberia"};
     private static final Producto[] PRODUCTOS = {
@@ -107,10 +107,10 @@ class IntegracionSedesRabbitTest {
         assertEquals(EstadoPedido.CONFIRMADO, resultado.getPedido().getEstado());
         assertEquals(2, resultado.getPedido().getDetalles().length);
         assertEquals(1, ala.pedidos.listarPendientes().length);
-        assertEquals(2, ala.inventarioDisponible("C01"));
-        assertTrue(esperarHasta(() -> ala.catalogoStock("LIM", "B01") == 3, 5000));
-        assertTrue(esperarHasta(() -> sedes[1].catalogoStock("ALA", "C01") == 2, 5000));
-        assertTrue(esperarHasta(() -> sedes[2].catalogoStock("LIM", "B01") == 3, 5000));
+        assertEquals(2, ala.inventarioDisponibleLocal());
+        assertTrue(esperarHasta(() -> ala.catalogoStock("LIM", "B01") == 3));
+        assertTrue(esperarHasta(() -> sedes[1].catalogoStock("ALA", "C01") == 2));
+        assertTrue(esperarHasta(() -> sedes[2].catalogoStock("LIM", "B01") == 3));
         RespuestaReserva exceso = ala.mensajeria.solicitarReserva("LIM", "VERIFICAR-STOCK",
                 "B01", 4);
         assertFalse(exceso.isExito());
@@ -120,7 +120,7 @@ class IntegracionSedesRabbitTest {
     @Test
     void rechazoPorStockLiberaReservasLocalesYRemotasYQuedaEnHistorial() throws Exception {
         NodoIntegracion ala = iniciarRed()[0];
-        int disponibleLocalAntes = ala.inventarioDisponible("C01");
+        int disponibleLocalAntes = ala.inventarioDisponibleLocal();
 
         ResultadoPedido resultado = ala.pedidos.registrarPedido("Heredia", new SolicitudLinea[]{
                 new SolicitudLinea("C01", 1), new SolicitudLinea("S01", 10)
@@ -130,9 +130,9 @@ class IntegracionSedesRabbitTest {
         assertEquals(EstadoPedido.CANCELADO, resultado.getPedido().getEstado());
         assertEquals(0, ala.pedidos.listarPendientes().length);
         assertEquals(EstadoPedido.CANCELADO, ala.pedidos.listarHistorial()[0].getEstado());
-        assertTrue(esperarHasta(() -> ala.puedeReservarRemotoCompleto("SJO", "S01", 6), 5000));
-        assertEquals(disponibleLocalAntes, ala.inventarioDisponible("C01"));
-        assertEquals(0, ala.reservado("C01"));
+        assertTrue(esperarHasta(() -> ala.puedeReservarRemotoCompleto("SJO", "S01", 6)));
+        assertEquals(disponibleLocalAntes, ala.inventarioDisponibleLocal());
+        assertEquals(0, ala.cantidadReservadaLocal());
     }
 
     @Test
@@ -145,7 +145,7 @@ class IntegracionSedesRabbitTest {
 
         assertFalse(resultado.isAceptado());
         assertTrue(resultado.getMotivo().toLowerCase().contains("destino"));
-        assertTrue(esperarHasta(() -> ala.puedeReservarRemotoCompleto("LIM", "B01", 5), 5000));
+        assertTrue(esperarHasta(() -> ala.puedeReservarRemotoCompleto("LIM", "B01", 5)));
         assertFalse(liberia.rutas.existeRuta("Liberia", "Cartago"),
                 "El grafo real actualmente no conecta Guanacaste con Cartago.");
     }
@@ -166,7 +166,7 @@ class IntegracionSedesRabbitTest {
         assertTrue(resultado.getMotivo().toLowerCase().contains("no respondió"));
         assertTrue(transcurrido >= ala.config.getTimeoutReservaMs() - 50);
         lim.iniciarMensajeria();
-        assertTrue(esperarHasta(() -> ala.puedeReservarRemotoCompleto("LIM", "B01", 5), 5000));
+        assertTrue(esperarHasta(() -> ala.puedeReservarRemotoCompleto("LIM", "B01", 5)));
     }
 
     @Test
@@ -204,7 +204,7 @@ class IntegracionSedesRabbitTest {
         ala.rutas.iniciarRecorrido(ala.pedidos.construirSolicitudesEntrega(), "11:00");
         ParadaEntrega parada = ala.rutas.calcularSiguienteEntrega();
         ala.entregas.registrarParada(parada, "11:00", LocalDateTime.now());
-        int disponibleAntes = ala.inventarioDisponible("C01");
+        int disponibleAntes = ala.inventarioDisponibleLocal();
         ala.cerrar();
 
         NodoIntegracion reabierta = new NodoIntegracion("ALA", carpetaTemporal.resolve("ALA"),
@@ -212,7 +212,7 @@ class IntegracionSedesRabbitTest {
         sedes[0] = reabierta;
         reabierta.iniciar();
 
-        assertEquals(disponibleAntes, reabierta.inventarioDisponible("C01"));
+        assertEquals(disponibleAntes, reabierta.inventarioDisponibleLocal());
         assertEquals(pedido.getPedido().getId(), reabierta.pedidos.listarHistorial()[0].getId());
         assertEquals(EstadoPedido.ENTREGADO,
                 reabierta.pedidos.listarHistorial()[0].getEstado());
@@ -249,8 +249,8 @@ class IntegracionSedesRabbitTest {
         ResultadoPedido resultadoSegundo = segunda.get(5, TimeUnit.SECONDS);
 
         assertNotEquals(resultadoPrimero.isAceptado(), resultadoSegundo.isAceptado());
-        assertEquals(0, ala.inventarioDisponible("C01"));
-        assertEquals(0, ala.reservado("C01"));
+        assertEquals(0, ala.inventarioDisponibleLocal());
+        assertEquals(0, ala.cantidadReservadaLocal());
         assertEquals(1, ala.pedidos.listarPendientes().length);
         assertEquals(2, ala.pedidos.listarHistorial().length);
     }
@@ -264,11 +264,11 @@ class IntegracionSedesRabbitTest {
         });
     }
 
-    private NodoIntegracion[] iniciarRed() throws IOException {
+    private NodoIntegracion[] iniciarRed() {
         return iniciarRed(3000);
     }
 
-    private NodoIntegracion[] iniciarRed(int timeoutMs) throws IOException {
+    private NodoIntegracion[] iniciarRed(int timeoutMs) {
         sedes = new NodoIntegracion[CODIGOS.length];
         for (int i = 0; i < CODIGOS.length; i++) {
             sedes[i] = new NodoIntegracion(CODIGOS[i], carpetaTemporal.resolve(CODIGOS[i]),
@@ -290,13 +290,13 @@ class IntegracionSedesRabbitTest {
         return stocks[indiceSede];
     }
 
-    private static boolean esperarHasta(BooleanSupplier condicion, long maximoMs) throws InterruptedException {
-        long limite = System.currentTimeMillis() + maximoMs;
+    private static boolean esperarHasta(BooleanSupplier condicion) throws InterruptedException {
+        long limite = System.currentTimeMillis() + MAX_ESPERA_MS;
         while (System.currentTimeMillis() < limite) {
             if (condicion.getAsBoolean()) {
                 return true;
             }
-            Thread.sleep(20);
+            TimeUnit.MILLISECONDS.sleep(20);
         }
         return condicion.getAsBoolean();
     }
@@ -328,12 +328,11 @@ class IntegracionSedesRabbitTest {
         private final ServicioPedidos pedidos;
         private final RepositorioVentasArchivo ventas;
         private final ServicioEntregas entregas;
-        private final ServicioEstadisticas estadisticas;
         private final ServicioInventario servicioInventario;
         private final ServicioRutas rutas;
 
         private NodoIntegracion(String codigo, Path carpeta, int[] stockInicial,
-                                TopologiaRabbit topologia, int timeoutMs) throws IOException {
+                                TopologiaRabbit topologia, int timeoutMs) {
             config = new ConfigSede(codigo, nombreDe(codigo), 8080, "localhost", 5672,
                     "guest", "guest", timeoutMs, carpeta.toString());
             persistencia = new PersistenciaSede(carpeta);
@@ -372,7 +371,6 @@ class IntegracionSedesRabbitTest {
             pedidos.restaurar(estado.getPedidos(), estado.getContadorIds());
             ventas = new RepositorioVentasArchivo(carpeta);
             entregas = new ServicioEntregas(config.getNombre(), pedidos, ventas);
-            estadisticas = new ServicioEstadisticas(config.getNombre(), ventas);
             servicioInventario = new ServicioInventario(inventario, catalogo, mensajeria);
             configurarPersistencia();
         }
@@ -411,13 +409,13 @@ class IntegracionSedesRabbitTest {
             mensajeria.cerrar();
         }
 
-        private int inventarioDisponible(String codigo) {
-            ExistenciaInventario existencia = inventario.consultar(codigo);
+        private int inventarioDisponibleLocal() {
+            ExistenciaInventario existencia = inventario.consultar(CODIGO_PRODUCTO_LOCAL);
             return existencia == null ? 0 : existencia.getCantidadDisponible();
         }
 
-        private int reservado(String codigo) {
-            ExistenciaInventario existencia = inventario.consultar(codigo);
+        private int cantidadReservadaLocal() {
+            ExistenciaInventario existencia = inventario.consultar(CODIGO_PRODUCTO_LOCAL);
             return existencia == null ? 0 : existencia.getCantidadReservada();
         }
 
