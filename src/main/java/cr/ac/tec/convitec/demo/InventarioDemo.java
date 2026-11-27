@@ -3,12 +3,9 @@ package cr.ac.tec.convitec.demo;
 import cr.ac.tec.convitec.mensajeria.RespuestaReserva;
 import cr.ac.tec.convitec.servicios.IInventarioLocal;
 
-// TODO PERSONA 2: reemplazar esta clase de demo por su implementación real de IInventarioLocal
-//   (inventario en archivos), cambiando la línea marcada en app/Sede.conDemostracion. Después borrar esta clase.
 /**
- * *** PROVISIONAL / DEMOSTRACIÓN ***
- * Inventario de ejemplo para poder correr una sede antes de que exista el inventario real
- * de la Persona 2, que lo REEMPLAZARÁ (ver Sede.conDemostracion). No guarda nada en archivos.
+ * Implementación provisional conservada para pruebas de consola antiguas.
+ * Las sedes reales usan InventarioLocal y PersistenciaSede.
  *
  * - stock = unidades DISPONIBLES (las reservadas ya no cuentan).
  * - reservar aparta unidades (salen del disponible); confirmar las da por vendidas;
@@ -17,6 +14,7 @@ import cr.ac.tec.convitec.servicios.IInventarioLocal;
  * - confirmar y liberar son idempotentes. Todo es synchronized (los mensajes llegan en otro hilo).
  * - Solo usa arreglos nativos.
  */
+@Deprecated
 public class InventarioDemo implements IInventarioLocal {
 
     private static final int CAPACIDAD_INICIAL = 8;

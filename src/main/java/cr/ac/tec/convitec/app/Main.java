@@ -4,6 +4,7 @@ import cr.ac.tec.convitec.config.ConfigException;
 import cr.ac.tec.convitec.config.ConfigSede;
 import cr.ac.tec.convitec.grafo.GrafoException;
 import cr.ac.tec.convitec.mensajeria.MensajeriaException;
+import cr.ac.tec.convitec.persistencia.PersistenciaException;
 import cr.ac.tec.convitec.web.PedidosFuentePendientes;
 import cr.ac.tec.convitec.web.ServidorWeb;
 import cr.ac.tec.convitec.web.ServidorWebException;
@@ -33,7 +34,7 @@ public final class Main {
         System.exit(ejecutar(args));
     }
 
-    /** Hace todo y devuelve el código de salida (sin stack traces para errores esperables). */
+    /** Hace todo y devuelve el código de salida (sin stack traces para errores esperables) **/
     static int ejecutar(String[] args) {
         ArgumentosSede argumentos;
         try {
@@ -47,8 +48,8 @@ public final class Main {
         Sede sede;
         try {
             config = argumentos.cargarConfiguracion();
-            sede = Sede.conDemostracion(config);
-        } catch (ConfigException | GrafoException | IllegalArgumentException e) {
+            sede = Sede.crearDesdeConfiguracion(config);
+        } catch (ConfigException | GrafoException | IllegalArgumentException | PersistenciaException e) {
             System.err.println("Error de configuración: " + e.getMessage());
             return 1;
         }

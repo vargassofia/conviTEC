@@ -2,15 +2,13 @@ package cr.ac.tec.convitec.demo;
 
 import cr.ac.tec.convitec.servicios.ICatalogoGlobal;
 
-// TODO PERSONA 2: reemplazar esta clase de demo por su implementación real de ICatalogoGlobal
-//   (catálogo global con AVL propio), cambiando la línea marcada en app/Sede.conDemostracion. Después borrar esta clase.
 /**
- * *** PROVISIONAL / DEMOSTRACIÓN ***
- * Catálogo global de ejemplo: guarda el ÚLTIMO stock conocido de cada producto de las otras
- * sedes (lo que llega por ACTUALIZACION_STOCK). La Persona 2 lo REEMPLAZARÁ por el real.
+ * Implementación provisional conservada para pruebas de consola antiguas.
+ * Las sedes reales usan CatalogoGlobal y PersistenciaSede.
  *
  * Arreglos paralelos (sede, código, cantidad) que crecen manualmente. Todo synchronized.
  */
+@Deprecated
 public class CatalogoGlobalDemo implements ICatalogoGlobal {
 
     private String[] sedes = new String[8];
