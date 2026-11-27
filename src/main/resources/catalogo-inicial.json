@@ -1,0 +1,9 @@
+[
+  {"version":1,"codigo":"A01","nombre":"Agua","descripcion":"Agua embotellada","categoria":"Bebidas","precio":600.0},
+  {"version":1,"codigo":"B01","nombre":"Bebida","descripcion":"Bebida de ejemplo","categoria":"Bebidas","precio":1000.0},
+  {"version":1,"codigo":"C01","nombre":"Café","descripcion":"Café","categoria":"Bebidas calientes","precio":1500.0},
+  {"version":1,"codigo":"F01","nombre":"Fruta","descripcion":"Fruta fresca","categoria":"Alimentos","precio":700.0},
+  {"version":1,"codigo":"G01","nombre":"Galletas","descripcion":"Galletas","categoria":"Alimentos","precio":800.0},
+  {"version":1,"codigo":"P01","nombre":"Pan","descripcion":"Pan fresco","categoria":"Alimentos","precio":1000.0},
+  {"version":1,"codigo":"S01","nombre":"Sándwich","descripcion":"Sándwich","categoria":"Alimentos","precio":2500.0}
+]
