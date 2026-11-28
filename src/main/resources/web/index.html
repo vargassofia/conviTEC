@@ -37,7 +37,21 @@
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
       <span>Próxima salida <strong id="proxima-hora"></strong></span>
     </div>
+
+    <div class="usuario-actual" id="usuario-actual" hidden>
+      <span class="usuario-texto">
+        <span class="sede-etiqueta">Sesión de</span>
+        <strong id="usuario-nombre"></strong>
+      </span>
+      <button class="boton-salir" id="boton-salir" type="button" aria-label="Cerrar sesión" title="Cerrar sesión">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H5v16h4"/><path d="M16 8l4 4-4 4M20 12H10"/></svg>
+        <span>Cerrar sesión</span>
+      </button>
+    </div>
   </header>
+
+  <!-- Inicio de sesión y elección de sede (js/acceso.js); ocupa toda la página -->
+  <div id="pantalla-acceso" hidden></div>
 
   <div class="estructura">
     <nav class="menu" id="menu" aria-label="Secciones"></nav>

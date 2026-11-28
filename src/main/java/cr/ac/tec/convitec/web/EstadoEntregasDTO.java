@@ -1,5 +1,6 @@
 package cr.ac.tec.convitec.web;
 
+import cr.ac.tec.convitec.modelo.Venta;
 import cr.ac.tec.convitec.rutas.ParadaEntrega;
 
 /**
@@ -9,12 +10,14 @@ import cr.ac.tec.convitec.rutas.ParadaEntrega;
  *   "iniciado": true, "sede": "San José", "horaSalida": "11:00",
  *   "ubicacionActual": "Heredia", "tiempoAcumulado": 20, "hayPendientes": true,
  *   "totalPedidos": 4, "entregados": 2,
- *   "pendientes":     [ { "idPedido": "P103", "destino": "Cartago" }, ... ],
- *   "noAlcanzables":  [ { "idPedido": "P403", "explicacion": "No hay ruta de Liberia a Cartago" } ],
+ *   "pendientes":     [ { "idPedido": "SJO-0003", "destino": "Cartago" }, ... ],
+ *   "noAlcanzables":  [ { "idPedido": "LIB-0003", "explicacion": "No hay ruta de Liberia a Cartago" } ],
  *   "paradas":        [ { "numero": 1, "desde": "San José", "destino": "Heredia", "camino": [...],
- *                         "tiempoTramo": 20, "tiempoAcumulado": 20, "idsPedidos": ["P102", "P104"] } ],
- *   "ultimaParada":   { ... la parada recién calculada, o null ... },
- *   "esDemostracion": true
+ *                         "tiempoTramo": 20, "tiempoAcumulado": 20, "idsPedidos": ["SJO-0002"] } ],
+ *   "ultimaParada":   { ... la parada recién hecha, o null ... },
+ *   "ventasRegistradas": [ { "idVenta": "V-SJO-0002", "idPedido": "SJO-0002", "montoTotal": 3000.0 } ],
+ *   "aviso":          null,   // texto si la parada se hizo pero sus ventas no se pudieron registrar
+ *   "esDemostracion": false
  * }
  */
 final class EstadoEntregasDTO {
@@ -31,12 +34,14 @@ final class EstadoEntregasDTO {
     final NoAlcanzableDTO[] noAlcanzables;
     final ParadaDTO[] paradas;
     final ParadaDTO ultimaParada;
+    final VentaRegistradaDTO[] ventasRegistradas;
+    final String aviso;
     final boolean esDemostracion;
 
     EstadoEntregasDTO(boolean iniciado, String sede, String horaSalida, String ubicacionActual, int tiempoAcumulado,
                       boolean hayPendientes, int totalPedidos, int entregados, PedidoDTO[] pendientes,
                       NoAlcanzableDTO[] noAlcanzables, ParadaDTO[] paradas, ParadaDTO ultimaParada,
-                      boolean esDemostracion) {
+                      VentaRegistradaDTO[] ventasRegistradas, String aviso, boolean esDemostracion) {
         this.iniciado = iniciado;
         this.sede = sede;
         this.horaSalida = horaSalida;
@@ -49,13 +54,16 @@ final class EstadoEntregasDTO {
         this.noAlcanzables = noAlcanzables;
         this.paradas = paradas;
         this.ultimaParada = ultimaParada;
+        this.ventasRegistradas = ventasRegistradas;
+        this.aviso = aviso;
         this.esDemostracion = esDemostracion;
     }
 
     /** Antes de empezar cualquier salida: el vehículo está en la sede. */
     static EstadoEntregasDTO sinIniciar(String sede, boolean esDemostracion) {
         return new EstadoEntregasDTO(false, sede, null, sede, 0, false, 0, 0,
-                new PedidoDTO[0], new NoAlcanzableDTO[0], new ParadaDTO[0], null, esDemostracion);
+                new PedidoDTO[0], new NoAlcanzableDTO[0], new ParadaDTO[0], null, new VentaRegistradaDTO[0],
+                null, esDemostracion);
     }
 
     static final class PedidoDTO {
@@ -75,6 +83,15 @@ final class EstadoEntregasDTO {
         NoAlcanzableDTO(String idPedido, String explicacion) {
             this.idPedido = idPedido;
             this.explicacion = explicacion;
+        }
+
+        /** Une los dos arreglos paralelos del recorrido (ids y explicaciones). */
+        static NoAlcanzableDTO[] de(String[] ids, String[] explicaciones) {
+            NoAlcanzableDTO[] lista = new NoAlcanzableDTO[ids.length];
+            for (int i = 0; i < ids.length; i++) {
+                lista[i] = new NoAlcanzableDTO(ids[i], explicaciones[i]);
+            }
+            return lista;
         }
     }
 
@@ -101,6 +118,28 @@ final class EstadoEntregasDTO {
         static ParadaDTO de(ParadaEntrega p) {
             return new ParadaDTO(p.getNumero(), p.getDesde(), p.getDestino(), p.getCamino(), p.getTiempoTramo(),
                     p.getTiempoAcumulado(), p.getIdsPedidos());
+        }
+    }
+
+    /** Una venta registrada al entregar (resumen para el mensaje de la pantalla). */
+    static final class VentaRegistradaDTO {
+        final String idVenta;
+        final String idPedido;
+        final double montoTotal;
+
+        private VentaRegistradaDTO(String idVenta, String idPedido, double montoTotal) {
+            this.idVenta = idVenta;
+            this.idPedido = idPedido;
+            this.montoTotal = montoTotal;
+        }
+
+        static VentaRegistradaDTO[] de(Venta[] ventas) {
+            VentaRegistradaDTO[] lista = new VentaRegistradaDTO[ventas.length];
+            for (int i = 0; i < ventas.length; i++) {
+                lista[i] = new VentaRegistradaDTO(ventas[i].getIdVenta(), ventas[i].getIdPedido(),
+                        ventas[i].getMontoTotal());
+            }
+            return lista;
         }
     }
 }
