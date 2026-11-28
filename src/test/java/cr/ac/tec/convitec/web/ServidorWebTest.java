@@ -2,15 +2,15 @@ package cr.ac.tec.convitec.web;
 
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParser;
+import cr.ac.tec.convitec.acceso.ServicioAcceso;
 import cr.ac.tec.convitec.config.ConfigSede;
-import cr.ac.tec.convitec.grafo.CargadorGrafo;
-import cr.ac.tec.convitec.grafo.Grafo;
-import cr.ac.tec.convitec.rutas.ServicioRutas;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -32,6 +32,11 @@ class ServidorWebTest {
     private final HttpClient cliente = HttpClient.newHttpClient();
     private ConfigSede config;
     private ServidorWeb servidor;
+    private int sedesCreadas;
+    private SedeWebDePrueba sede;
+
+    @TempDir
+    Path carpeta;
 
     @BeforeEach
     void preparar() {
@@ -40,11 +45,11 @@ class ServidorWebTest {
         servidor.iniciar();
     }
 
-    /** Servidor completo de una sede, con el grafo real y los pendientes de demostración. */
-    static ServidorWeb crear(ConfigSede config, int puerto, Clock reloj) {
-        Grafo grafo = CargadorGrafo.cargarDesdeRecurso("rutas.json");
-        return new ServidorWeb(config, grafo, new ServicioRutas(grafo, config.getNombre()),
-                new PendientesDemo(config.getNombre()), puerto, reloj);
+    /** Servidor de una sede completa (ver SedeWebDePrueba), cada una con su carpeta temporal. */
+    private ServidorWeb crear(ConfigSede config, int puerto, Clock reloj) {
+        sedesCreadas++;
+        sede = SedeWebDePrueba.crear(config.getCodigo(), carpeta.resolve("sede" + sedesCreadas));
+        return sede.servidor(puerto, reloj);
     }
 
     @AfterEach
@@ -130,6 +135,9 @@ class ServidorWebTest {
         assertTipo("/js/api.js", "text/javascript");
         assertTipo("/img/icono.svg", "image/svg+xml");
         assertTipo("/vendor/leaflet/leaflet.js", "text/javascript");
+        for (String js : new String[]{"util", "mapa", "entregas", "inventario", "nuevo-pedido", "pedidos", "estadisticas"}) {
+            assertTipo("/js/" + js + ".js", "text/javascript");
+        }
         assertTipo("/vendor/leaflet/leaflet.css", "text/css");
     }
 
@@ -194,18 +202,20 @@ class ServidorWebTest {
 
     @Test
     void datosInvalidos() {
-        Grafo grafo = CargadorGrafo.cargarDesdeRecurso("rutas.json");
-        ServicioRutas rutas = new ServicioRutas(grafo, "Alajuela");
-        PendientesDemo demo = new PendientesDemo("Alajuela");
+        ServiciosWeb servicios = SedeWebDePrueba.crear("ALA", carpeta.resolve("invalidos")).servicios;
         Clock reloj = Clock.systemDefaultZone();
 
-        assertThrows(IllegalArgumentException.class, () -> new ServidorWeb(null, grafo, rutas, demo));
-        assertThrows(IllegalArgumentException.class, () -> new ServidorWeb(config, null, rutas, demo));
-        assertThrows(IllegalArgumentException.class, () -> new ServidorWeb(config, grafo, null, demo));
-        assertThrows(IllegalArgumentException.class, () -> new ServidorWeb(config, grafo, rutas, null));
-        assertThrows(IllegalArgumentException.class, () -> new ServidorWeb(config, grafo, rutas, demo, -1, reloj));
-        assertThrows(IllegalArgumentException.class, () -> new ServidorWeb(config, grafo, rutas, demo, 70000, reloj));
-        assertThrows(IllegalArgumentException.class, () -> new ServidorWeb(config, grafo, rutas, demo, 0, null));
+        ServicioAcceso acceso = new ServicioAcceso("ALA", carpeta.resolve("invalidos"), reloj, 1000);
+
+        assertThrows(IllegalArgumentException.class, () -> new ServidorWeb(null, acceso));
+        assertThrows(IllegalArgumentException.class, () -> new ServidorWeb(servicios, null));
+        assertThrows(IllegalArgumentException.class, () -> new ServidorWeb(servicios, acceso, -1, reloj));
+        assertThrows(IllegalArgumentException.class, () -> new ServidorWeb(servicios, acceso, 70000, reloj));
+        assertThrows(IllegalArgumentException.class, () -> new ServidorWeb(servicios, acceso, 0, null));
+        // Ningún servicio puede faltar
+        assertThrows(IllegalArgumentException.class, () -> new ServiciosWeb(config, servicios.getGrafo(),
+                servicios.getRutas(), servicios.getPendientes(), null, servicios.getInventario(),
+                servicios.getPedidos(), servicios.getEstadisticas()));
     }
 
     // ------------------------------------------------------------------
@@ -235,7 +245,7 @@ class ServidorWebTest {
     }
 
     private HttpResponse<String> enviar(String metodo, String ruta) throws IOException, InterruptedException {
-        HttpRequest peticion = HttpRequest.newBuilder(URI.create(servidor.getUrl() + ruta))
+        HttpRequest peticion = sede.conSesion(HttpRequest.newBuilder(URI.create(servidor.getUrl() + ruta)))
                 .method(metodo, HttpRequest.BodyPublishers.noBody())
                 .build();
         return cliente.send(peticion, HttpResponse.BodyHandlers.ofString());

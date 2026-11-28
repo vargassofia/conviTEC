@@ -3,6 +3,7 @@ package cr.ac.tec.convitec.web;
 import com.google.gson.JsonParseException;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
+import cr.ac.tec.convitec.acceso.AccesoException;
 import cr.ac.tec.convitec.grafo.GrafoException;
 import cr.ac.tec.convitec.mensajeria.MensajeriaException;
 
@@ -21,6 +22,7 @@ import java.nio.charset.StandardCharsets;
  * - IllegalArgumentException (dato inválido)                       -> 400
  * - GrafoException (ubicación inexistente, etc.)                   -> 422
  * - IllegalStateException (operación que no aplica ahora)          -> 409
+ * - AccesoException (sesión, contraseña, código)                   -> 401, 403 o 429 (ver estadoDe)
  * - MensajeriaException (RabbitMQ caído)                           -> 503
  * - Cualquier otro error                                           -> 500, con un mensaje genérico
  *
@@ -152,6 +154,12 @@ abstract class ManejadorApi implements HttpHandler {
             } catch (IllegalStateException e) {
                 estado = 409;
                 cuerpo = new RespuestaHttp.ErrorDTO(estado, e.getMessage());
+            } catch (AccesoException e) {
+                estado = estadoDe(e);
+                if (e.getMotivo() == AccesoException.Motivo.BLOQUEADO) {
+                    intercambio.getResponseHeaders().set("Retry-After", String.valueOf(e.getSegundosEspera()));
+                }
+                cuerpo = new RespuestaHttp.ErrorDTO(estado, e.getMessage());
             } catch (MensajeriaException e) {
                 estado = 503;
                 cuerpo = new RespuestaHttp.ErrorDTO(estado, "No hay comunicación con las otras sedes: " + e.getMessage());
@@ -163,6 +171,19 @@ abstract class ManejadorApi implements HttpHandler {
             RespuestaHttp.json(intercambio, estado, cuerpo);
         } finally {
             intercambio.close();
+        }
+    }
+
+    /** SIN_SESION y CREDENCIALES -> 401, BLOQUEADO -> 429, CODIGO y CONFIRMACION -> 403. */
+    static int estadoDe(AccesoException e) {
+        switch (e.getMotivo()) {
+            case BLOQUEADO:
+                return 429;
+            case CODIGO:
+            case CONFIRMACION:
+                return 403;
+            default:
+                return 401;
         }
     }
 

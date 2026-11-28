@@ -1,8 +1,9 @@
-// Pantalla de Entregas: salida del vehículo paso a paso, recorrido completo y consulta de rutas.
+// Pantalla de Entregas: salida del vehículo paso a paso (cada parada entrega y registra las ventas),
+// vista previa del recorrido completo y consulta de rutas.
 
 import { obtener, enviar } from './api.js';
 import { MapaConviTEC } from './mapa.js';
-import { escapar, textoCamino, textoMinutos } from './util.js';
+import { colones, escapar, plural, textoCamino, textoMinutos } from './util.js';
 
 /**
  * Muestra la pantalla dentro del contenedor.
@@ -35,7 +36,7 @@ export function montarEntregas(contenedor, sede) {
           <svg class="icono" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
           Calcular siguiente punto de entrega
         </button>
-        <button class="boton-enlace" id="boton-completo" type="button">Ver el recorrido completo de una vez</button>
+        <button class="boton-enlace" id="boton-completo" type="button">Ver el recorrido completo (vista previa, no entrega nada)</button>
 
         <div class="mensaje" id="mensaje" role="status" aria-live="polite" hidden></div>
 
@@ -109,7 +110,7 @@ export function montarEntregas(contenedor, sede) {
     caja.hidden = !html;
   }
 
-  function pintarEstado(e) {
+  function pintarEstado(e, dibujarMapa = true) {
     estado = e;
     $('etiqueta-demo').hidden = !e.esDemostracion;
     $('dato-ubicacion').textContent = e.ubicacionActual || '—';
@@ -142,7 +143,7 @@ export function montarEntregas(contenedor, sede) {
             <span class="detalle-parada">${escapar(textoMinutos(p.tiempoTramo))} · acumulado ${escapar(textoMinutos(p.tiempoAcumulado))} · ${escapar(p.idsPedidos.join(', '))}</span>
           </li>`).join('');
 
-    if (mapa) {
+    if (mapa && dibujarMapa) {
       mapa.mostrarEntregas(e);
     }
   }
@@ -156,10 +157,18 @@ export function montarEntregas(contenedor, sede) {
     let html = `<strong>Parada ${p.numero}: ${escapar(p.destino)}</strong>
       <span>Camino: ${textoCamino(p.camino)}</span>
       <span>${escapar(textoMinutos(p.tiempoTramo))} de viaje (acumulado ${escapar(textoMinutos(p.tiempoAcumulado))}). Se entregan ${escapar(pedidos)}.</span>`;
-    if (!e.hayPendientes) {
-      html += `<span class="fin-recorrido">Recorrido terminado: ${e.paradas.length} paradas, ${escapar(textoMinutos(e.tiempoAcumulado))} en total.</span>`;
+    const ventas = e.ventasRegistradas || [];
+    if (ventas.length > 0) {
+      const monto = ventas.reduce((suma, v) => suma + v.montoTotal, 0);
+      html += `<span>✓ Se ${ventas.length === 1 ? 'registró' : 'registraron'} ${plural(ventas.length, 'venta', 'ventas')} por <strong>${colones(monto)}</strong>.</span>`;
     }
-    mostrarMensaje('exito', html);
+    if (e.aviso) {
+      html += `<span class="aviso-parada">⚠ ${escapar(e.aviso)}</span>`;
+    }
+    if (!e.hayPendientes) {
+      html += `<span class="fin-recorrido">Recorrido terminado: ${plural(e.paradas.length, 'parada', 'paradas')}, ${escapar(textoMinutos(e.tiempoAcumulado))} en total.</span>`;
+    }
+    mostrarMensaje(e.aviso ? 'info' : 'exito', html);
   }
 
   // ---------------------------------------------------------------------------
@@ -183,7 +192,7 @@ export function montarEntregas(contenedor, sede) {
       boton.innerHTML = textoOriginal;
       boton.disabled = false;
       if (estado) {
-        pintarEstado(estado);
+        pintarEstado(estado, false); // solo los botones y listas; el mapa ya quedó dibujado
       }
     }
   }
@@ -214,7 +223,7 @@ export function montarEntregas(contenedor, sede) {
       } else if (e.pendientes.length === 0) {
         mostrarMensaje('info', 'Ninguno de los pedidos de esta salida se puede entregar desde esta sede.');
       } else {
-        mostrarMensaje('info', `Salida de las ${escapar(hora)} lista: ${e.pendientes.length} pedido(s) por entregar. `
+        mostrarMensaje('info', `Salida de las ${escapar(hora)} lista: ${plural(e.pendientes.length, 'pedido', 'pedidos')} por entregar. `
           + 'Presione <strong>Calcular siguiente punto de entrega</strong>.');
       }
     });
@@ -234,15 +243,31 @@ export function montarEntregas(contenedor, sede) {
       return;
     }
     ejecutar(evento.currentTarget, 'Calculando…', async () => {
-      const e = await enviar('/api/entregas/completo', { horaSalida: hora });
-      pintarEstado(e);
-      if (e.paradas.length === 0) {
-        mostrarMensaje('info', 'No hay entregas que hacer en esta salida.');
-      } else {
-        mostrarMensaje('exito', `<strong>Recorrido completo de las ${escapar(hora)}</strong>
-          <span>${e.paradas.length} paradas, ${e.entregados} pedido(s) entregados, ${escapar(textoMinutos(e.tiempoAcumulado))} en total.</span>
-          <span>El vehículo termina en ${escapar(e.ubicacionActual)} (no regresa a la sede).</span>`);
+      const v = await enviar('/api/entregas/vista-previa', { horaSalida: hora });
+      if (v.paradas.length === 0) {
+        mostrarMensaje('info', `No hay pedidos por entregar en la salida de las ${escapar(hora)}.`);
+        return;
       }
+      const final = v.paradas[v.paradas.length - 1].destino;
+      if (mapa) {
+        // El mapa usa la misma forma que el estado de una salida terminada
+        mapa.mostrarEntregas({
+          iniciado: true, sede: v.sede, ubicacionActual: final, paradas: v.paradas, pendientes: [], hayPendientes: false,
+        });
+      }
+      mostrarMensaje('info', `<strong>Vista previa de la salida de las ${escapar(hora)}</strong>
+        <span>${v.paradas.map((p) => `${p.numero}. ${escapar(p.destino)} (${escapar(textoMinutos(p.tiempoAcumulado))})`).join(' · ')}</span>
+        <span>${plural(v.paradas.length, 'parada', 'paradas')}, ${plural(v.pedidosEntregados, 'pedido', 'pedidos')}, <strong>${escapar(textoMinutos(v.tiempoTotal))}</strong> en total.
+          El vehículo terminaría en ${escapar(final)} (no regresa a la sede).</span>
+        ${v.noAlcanzables.length > 0 ? `<span>No se podrían entregar: ${v.noAlcanzables.map((n) => escapar(n.idPedido)).join(', ')}.</span>` : ''}
+        <span class="aviso-parada">Esto es solo una vista previa: no se entregó ni se registró nada.</span>
+        <button class="boton-enlace" type="button" id="volver-salida">Volver a ver la salida actual en el mapa</button>`);
+      $('volver-salida').addEventListener('click', () => {
+        if (mapa && estado) {
+          mapa.mostrarEntregas(estado);
+        }
+        $('mensaje').hidden = true;
+      });
     });
   });
 

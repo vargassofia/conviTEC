@@ -9,6 +9,7 @@ import cr.ac.tec.convitec.rutas.SolicitudEntrega;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.PrintStream;
+import java.util.function.Supplier;
 
 /**
  * Consola de prueba de una sede, para usarla mientras la interfaz web no está lista.
@@ -29,6 +30,7 @@ public class ConsolaSede {
             "  liberar <SEDE> <idPedido> <codigo>            libera una reserva",
             "  ruta <destino>                                tiempo y camino desde esta sede",
             "  entregar <11:00|15:00> <id>:<destino> ...     planifica el recorrido de entregas",
+            "  codigo-acceso                                 código para crear una cuenta o recuperar el acceso a la web",
             "  salir                                         cierra la sede",
             "Nombres con espacio: entre comillas (\"San José\") o con guion bajo (San_José).",
             "Las tildes son opcionales: San_Jose, Limon y Paraiso tambien sirven.");
@@ -36,6 +38,8 @@ public class ConsolaSede {
     private final Sede sede;
     private final BufferedReader entrada;
     private final PrintStream salida;
+    /** Genera el código de acceso de la web (lo pone Main); null si la web no está disponible. */
+    private Supplier<String> generadorCodigoAcceso;
 
     public ConsolaSede(Sede sede, BufferedReader entrada, PrintStream salida) {
         if (sede == null || entrada == null || salida == null) {
@@ -44,6 +48,11 @@ public class ConsolaSede {
         this.sede = sede;
         this.entrada = entrada;
         this.salida = salida;
+    }
+
+    /** Conecta el comando "codigo-acceso" con el servicio de acceso de la web. */
+    public void setGeneradorCodigoAcceso(Supplier<String> generador) {
+        this.generadorCodigoAcceso = generador;
     }
 
     /** Lee y ejecuta comandos hasta "salir" o hasta que se acabe la entrada. */
@@ -120,6 +129,9 @@ public class ConsolaSede {
                 case "entregar":
                     entregar(comando);
                     break;
+                case "codigo-acceso":
+                    codigoAcceso();
+                    break;
                 case "salir":
                     salida.println("Cerrando la sede " + sede.getCodigo() + "...");
                     return false;
@@ -138,6 +150,16 @@ public class ConsolaSede {
     // ------------------------------------------------------------------
     // Comandos
     // ------------------------------------------------------------------
+
+    private void codigoAcceso() {
+        if (generadorCodigoAcceso == null) {
+            salida.println("La interfaz web no está disponible en esta sede.");
+            return;
+        }
+        salida.println("Código de acceso: " + generadorCodigoAcceso.get() + "  (sirve una sola vez, vence en 60 minutos)");
+        salida.println("En la página, elija \"¿No puede entrar?\" y escríbalo para crear una cuenta o cambiar"
+                + " una contraseña olvidada.");
+    }
 
     // TODO PERSONA 2: stock, agregar y catalogo solo funcionan con las clases de demo. Si quieren usarlos con
     //   sus clases reales, agreguen métodos para listar y agregar unidades y úsenlos aquí.

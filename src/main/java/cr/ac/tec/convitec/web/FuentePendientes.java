@@ -5,9 +5,8 @@ import cr.ac.tec.convitec.rutas.SolicitudEntrega;
 /**
  * De dónde saca la pantalla de Entregas los pedidos que tiene que repartir el vehículo.
  *
- * Hoy la implementa PendientesDemo (pedidos de prueba fijos). Cuando exista el módulo de pedidos
- * de la Persona 2, su gestor de pedidos la implementa devolviendo los pedidos ACEPTADOS y todavía
- * no entregados de esa salida, convertidos a SolicitudEntrega(id, destino).
+ * La implementa PedidosFuentePendientes, con los pedidos CONFIRMADOS y todavía no entregados del
+ * servicio de pedidos, convertidos a SolicitudEntrega(id, destino).
  */
 public interface FuentePendientes {
 
