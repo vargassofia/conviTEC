@@ -37,7 +37,7 @@ public final class Main {
         System.exit(ejecutar(args));
     }
 
-    /** Hace todo y devuelve el código de salida (sin stack traces para errores esperables). */
+    /** Hace todo y devuelve el código de salida (sin stack traces para errores esperables) **/
     static int ejecutar(String[] args) {
         ArgumentosSede argumentos;
         try {
@@ -51,8 +51,8 @@ public final class Main {
         Sede sede;
         try {
             config = argumentos.cargarConfiguracion();
-            sede = Sede.conDemostracion(config);
-        } catch (ConfigException | GrafoException | IllegalArgumentException e) {
+            sede = Sede.crearDesdeConfiguracion(config);
+        } catch (ConfigException | GrafoException | IllegalArgumentException | PersistenciaException e) {
             System.err.println("Error de configuración: " + e.getMessage());
             return 1;
         }

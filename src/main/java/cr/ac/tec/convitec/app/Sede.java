@@ -4,6 +4,8 @@ import cr.ac.tec.convitec.config.ConfigSede;
 import cr.ac.tec.convitec.catalogo.CatalogoGlobal;
 import cr.ac.tec.convitec.catalogo.InventarioLocal;
 import cr.ac.tec.convitec.catalogo.ServicioInventario;
+import cr.ac.tec.convitec.modelo.Existencia;
+import cr.ac.tec.convitec.modelo.Producto;
 import cr.ac.tec.convitec.entregas.ServicioEntregas;
 import cr.ac.tec.convitec.estadisticas.ServicioEstadisticas;
 import cr.ac.tec.convitec.grafo.CargadorGrafo;
@@ -27,7 +29,7 @@ import cr.ac.tec.convitec.servicios.IRepositorioVentas;
  * La sede carga su inventario, catálogo, pedidos y ventas desde la carpeta local configurada.
  *
  * Uso:
- *   Sede sede = Sede.conDemostracion(config);
+ *   Sede sede = Sede.crearDesdeConfiguracion(config);
  *   sede.iniciar();   // conecta a RabbitMQ
  *   ...
  *   sede.cerrar();    // seguro aunque se llame dos veces
@@ -46,6 +48,7 @@ public class Sede {
     private final ServicioPedidos servicioPedidos;
     private final ServicioEntregas servicioEntregas;
     private final ResultadoRecuperacion recuperacion;
+    private final PersistenciaSede persistencia;
 
     private boolean iniciada;
     private boolean cerrada;
@@ -53,8 +56,8 @@ public class Sede {
     /**
      * Recupera una sede desde sus archivos locales; usa RabbitMQ real si no se inyecta mensajería.
      */
-    public static Sede conDemostracion(ConfigSede config) {
-        return conDemostracion(config, null);
+    public static Sede crearDesdeConfiguracion(ConfigSede config) {
+        return crearDesdeConfiguracion(config, null);
     }
 
     /**
@@ -62,7 +65,7 @@ public class Sede {
      *
      * @param mensajeria null = MensajeriaRabbit real; las pruebas pasan una falsa (SedeArranqueTest).
      */
-    static Sede conDemostracion(ConfigSede config, IMensajeria mensajeria) {
+    static Sede crearDesdeConfiguracion(ConfigSede config, IMensajeria mensajeria) {
         if (config == null) {
             throw new IllegalArgumentException("La sede necesita su configuración.");
         }
@@ -72,7 +75,19 @@ public class Sede {
         PersistenciaSede persistencia = new PersistenciaSede(config.getCarpetaDatos());
         ResultadoRecuperacion recuperacion = new RecuperacionSede(persistencia)
                 .recuperar(config, rutas, mensajeria);
-        return new Sede(config, grafo, rutas, recuperacion);
+        return new Sede(config, grafo, rutas, recuperacion, persistencia);
+    }
+
+    /** @deprecated Use {@link #crearDesdeConfiguracion(ConfigSede)}. */
+    @Deprecated
+    public static Sede conDemostracion(ConfigSede config) {
+        return crearDesdeConfiguracion(config);
+    }
+
+    /** @deprecated Use {@link #crearDesdeConfiguracion(ConfigSede, IMensajeria)}. */
+    @Deprecated
+    static Sede conDemostracion(ConfigSede config, IMensajeria mensajeria) {
+        return crearDesdeConfiguracion(config, mensajeria);
     }
 
     /** Sede con mensajería RabbitMQ real. */
@@ -93,15 +108,24 @@ public class Sede {
         this(config, null, null, inventario, catalogo, repositorioVentas, mensajeria, null);
     }
 
-    private Sede(ConfigSede config, Grafo grafo, ServicioRutas rutas, ResultadoRecuperacion recuperacion) {
+    private Sede(ConfigSede config, Grafo grafo, ServicioRutas rutas,
+                 ResultadoRecuperacion recuperacion, PersistenciaSede persistencia) {
         this(config, grafo, rutas, recuperacion.getInventario(), recuperacion.getCatalogo(),
-                recuperacion.getRepositorioVentas(), recuperacion.getMensajeria(), recuperacion);
+                recuperacion.getRepositorioVentas(), recuperacion.getMensajeria(), recuperacion, persistencia);
     }
 
     private Sede(ConfigSede config, Grafo grafoPreparado, ServicioRutas rutasPreparadas,
                  IInventarioLocal inventario, ICatalogoGlobal catalogo,
                  IRepositorioVentas repositorioVentas, IMensajeria mensajeria,
                  ResultadoRecuperacion recuperacion) {
+        this(config, grafoPreparado, rutasPreparadas, inventario, catalogo, repositorioVentas,
+                mensajeria, recuperacion, null);
+    }
+
+    private Sede(ConfigSede config, Grafo grafoPreparado, ServicioRutas rutasPreparadas,
+                 IInventarioLocal inventario, ICatalogoGlobal catalogo,
+                 IRepositorioVentas repositorioVentas, IMensajeria mensajeria,
+                 ResultadoRecuperacion recuperacion, PersistenciaSede persistencia) {
         if (config == null || inventario == null || catalogo == null || repositorioVentas == null
                 || mensajeria == null) {
             throw new IllegalArgumentException("La sede necesita configuración, inventario, catálogo, "
@@ -121,6 +145,7 @@ public class Sede {
         this.estadisticas = new ServicioEstadisticas(config.getNombre(), repositorioVentas);
         this.mensajeria = mensajeria;
         this.recuperacion = recuperacion;
+        this.persistencia = persistencia;
         this.servicioInventario = inventario instanceof InventarioLocal inventarioLocal
                 && catalogo instanceof CatalogoGlobal catalogoGlobal
                 ? new ServicioInventario(inventarioLocal, catalogoGlobal, mensajeria) : null;
@@ -140,13 +165,19 @@ public class Sede {
         }
         if (!iniciada) {
             mensajeria.iniciar();
-            iniciada = true;
-            if (recuperacion != null) {
-                for (cr.ac.tec.convitec.persistencia.LiberacionPendiente liberacion
-                        : recuperacion.getLiberacionesPendientes()) {
-                    mensajeria.liberarReserva(liberacion.getCodigoSede(), liberacion.getIdPedido(),
-                            liberacion.getCodigoProducto());
+            try {
+                if (recuperacion != null) {
+                    for (cr.ac.tec.convitec.persistencia.LiberacionPendiente liberacion
+                            : recuperacion.getLiberacionesPendientes()) {
+                        mensajeria.liberarReserva(liberacion.getCodigoSede(), liberacion.getIdPedido(),
+                                liberacion.getCodigoProducto());
+                    }
+                    publicarStockPropio();
                 }
+                iniciada = true;
+            } catch (RuntimeException error) {
+                mensajeria.cerrar();
+                throw error;
             }
         }
     }
@@ -158,7 +189,47 @@ public class Sede {
         }
         cerrada = true;
         iniciada = false;
-        mensajeria.cerrar();
+        try {
+            guardarEstadoFinal();
+        } finally {
+            mensajeria.cerrar();
+        }
+    }
+
+    private void publicarStockPropio() {
+        if (!(catalogo instanceof CatalogoGlobal catalogoReal)
+                || !(inventario instanceof InventarioLocal inventarioReal)) {
+            return;
+        }
+        Producto[] productos = catalogoReal.exportarCatalogo();
+        Existencia[] existencias = inventarioReal.exportarExistencias();
+        for (Producto producto : productos) {
+            int disponible = 0;
+            for (Existencia existencia : existencias) {
+                if (producto.getCodigo().equalsIgnoreCase(existencia.getCodigoProducto())) {
+                    disponible = existencia.getCantidadDisponible();
+                    break;
+                }
+            }
+            catalogoReal.actualizarStock(config.getCodigo(), producto.getCodigo(), disponible);
+            mensajeria.publicarActualizacionStock(producto.getCodigo(), disponible);
+        }
+    }
+
+    private void guardarEstadoFinal() {
+        if (persistencia == null) {
+            return;
+        }
+        try {
+            persistencia.guardarInventario((InventarioLocal) inventario);
+            persistencia.guardarCatalogo(((CatalogoGlobal) catalogo).exportarCatalogo());
+            persistencia.guardarStockConocido((CatalogoGlobal) catalogo);
+            persistencia.guardarPedidos(servicioPedidos);
+            persistencia.guardarVentas(repositorioVentas.listar());
+        } catch (RuntimeException error) {
+            System.err.println("No se pudo guardar el estado final de " + config.getCodigo()
+                    + ": " + error.getMessage());
+        }
     }
 
     public synchronized boolean estaIniciada() {

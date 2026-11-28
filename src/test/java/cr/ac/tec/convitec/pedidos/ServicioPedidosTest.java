@@ -15,6 +15,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -73,6 +76,36 @@ class ServicioPedidosTest {
 
         assertTrue(seGuardoEnProceso[0]);
         assertEquals(EstadoPedido.CONFIRMADO, resultado.getPedido().getEstado());
+    }
+
+    @Test
+    void dosPedidosSimultaneosCompitiendoPorLaUltimaUnidadDejanUnaSolaReservaConfirmada() throws Exception {
+        inventario.agregarUnidades("B01", 1);
+        CountDownLatch inicio = new CountDownLatch(1);
+        FutureTask<ResultadoPedido> primero = new FutureTask<>(() -> {
+            inicio.await();
+            return servicio.registrarPedido("Centro",
+                    new SolicitudLinea[]{new SolicitudLinea("B01", 1)});
+        });
+        FutureTask<ResultadoPedido> segundo = new FutureTask<>(() -> {
+            inicio.await();
+            return servicio.registrarPedido("Centro",
+                    new SolicitudLinea[]{new SolicitudLinea("B01", 1)});
+        });
+        Thread hiloPrimero = new Thread(primero, "pedido-concurrente-1");
+        Thread hiloSegundo = new Thread(segundo, "pedido-concurrente-2");
+        hiloPrimero.start();
+        hiloSegundo.start();
+        inicio.countDown();
+
+        ResultadoPedido resultadoPrimero = primero.get(5, TimeUnit.SECONDS);
+        ResultadoPedido resultadoSegundo = segundo.get(5, TimeUnit.SECONDS);
+
+        assertNotEquals(resultadoPrimero.isAceptado(), resultadoSegundo.isAceptado());
+        assertEquals(0, inventario.obtenerDisponible("B01"));
+        assertEquals(0, inventario.getCantidadReservas());
+        assertEquals(1, servicio.listarPendientes().length);
+        assertEquals(2, servicio.listarHistorial().length);
     }
 
     @Test
